@@ -1,0 +1,37 @@
+{
+  "name": "campushub-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CampusHub backend — CS 5500 semester project",
+  "engines": {
+    "node": ">=24.21.0",
+    "npm": ">=11.19.1"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch -r ts-node/register src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run typecheck && npm run lint && npm run format:check"
+  },
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "5.2.1",
+    "mongoose": "9.10.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/express": "5.0.6",
+    "@types/node": "24.19.0",
+    "eslint": "10.11.0",
+    "jiti": "2.7.0",
+    "prettier": "3.9.9",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0"
+  }
+}
