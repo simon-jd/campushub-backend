@@ -9,7 +9,8 @@ This section is the single record of review status. It previously also appeared 
 - Express application, startup entry point, and health check: **implemented**.
 - Boundary-verification prompt, static checks, and HTTP verification of development and compiled entry points: **completed**.
 - Human review of generated code: **completed**. The user confirmed that the code had been reviewed without concerns, then requested English documentation.
-- Remote repository creation, PR creation, and course-platform submission: **not performed**.
+- Remote repository: **created and pushed** to the private [postedism/campushub-backend](https://github.khoury.northeastern.edu/postedism/campushub-backend) repository on Khoury GitHub. Local `main` tracks `origin/main`.
+- PR creation and course-platform submission: **not performed**.
 
 ## Initialization Decisions (Historical Record)
 
