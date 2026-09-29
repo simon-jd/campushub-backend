@@ -5,8 +5,8 @@
 
 ## 1. 当前阶段与人类审阅
 
-- 当前只完成 Lab 1 的项目初始化；本文件已按用户首轮审阅意见修订，**修订版待用户确认**。
-- 用户审阅规则之后，才能执行 Part 3 的 Express 服务器和健康检查生成任务。
+- 用户已审阅并确认本规则，已授权执行 Part 3 的 Express 服务器和健康检查生成任务。
+- 生成代码仍需用户亲自审阅，不能将规则确认等同于代码审阅完成。
 - 不把代理自检、工具检查或其他代理审阅记作用户已审阅；如实记录实际状态。
 - 后续修改规则时说明原因和影响。不得为消除检查错误而静默删除约束、关闭规则或降低严格度。
 
@@ -36,6 +36,7 @@
 | `src/controllers/` | 读取和验证 HTTP 输入，调用 Service，设置状态码和响应，转交错误    | 导入或调用 Mongoose Model、直接数据库查询、业务规则         |
 | `src/services/`    | 业务逻辑与持久化操作，调用 Mongoose Model，接收和返回有类型的数据 | Express 请求/响应对象、HTTP 状态码、路由注册、HTTP 响应包装 |
 | `src/models/`      | Mongoose schema、数据 interface 与必要的 model 定义及导出         | 查询执行、请求处理、业务规则                                |
+| `src/middleware/`  | 公共 HTTP 中间件、统一 404 和错误响应                             | 业务规则、数据库查询                                        |
 | `src/interfaces/`  | 请求、响应、业务数据和函数契约                                    | 有副作用的可执行逻辑                                        |
 | `src/types/`       | TypeScript 声明和必要的第三方类型扩展                             | 应用运行时逻辑                                              |
 
@@ -59,7 +60,7 @@
 - 所有返回 JSON 的端点统一使用以下结构，不混用裸对象、裸数组或不同的顶层字段：
 
 ```typescript
-// 后续实现时统一定义在 interfaces/api-response.interface.ts。
+// 统一定义在 src/interfaces/api-response.interface.ts。
 export interface ApiSuccess<T> {
   success: true;
   data: T;
@@ -122,8 +123,8 @@ export interface ApiFailure {
   2. 分析根因：明确是否是 TypeScript 类型收窄/空值处理/接口不匹配，或跨层访问等分层违规；若属于格式、依赖或工具配置问题，如实单列，不强行归入前两类。
   3. 修复导致失败的类型处理、职责放置或具体代码，再重新执行原失败命令及必要检查；如有剩余失败逐项报告。
 - **禁止私自修改 `tsconfig.json` 或 ESLint 忽略项来“假装通过”**；同样禁止降低规则级别、增加 `eslint-disable`、缩小检查文件范围、使用 `@ts-ignore`/`any` 或修改脚本跳过检查。配置确需变更时，先展示证据、影响和拟议差异，取得用户对该变更的明确批准。
-- 当前只有环境类型声明；类型检查和构建通过仅证明初始化配置可用，不代表 Express 服务已经实现。
-- `dev` 和 `start` 已预置为后续 `src/server.ts` / `dist/server.js` 入口；入口生成之前不能声称服务已启动。
+- 类型检查和构建通过不能代替实际 HTTP 验证。
+- `dev` 和 `start` 分别运行 `src/server.ts` / `dist/server.js`；必须实际启动并请求端点，才能声称服务运行验证通过。
 - Part 3 生成代码后，运行 `npm run dev`，实际请求 `GET /api/v1/health`，确认状态码为 `200`、响应为统一成功 JSON，`data.status` 为 `ok`、`data.timestamp` 为有效的 UTC ISO 8601 时间戳，并复查代码的分层和类型。
 - 如果生成结果越界，修正规则或实现后重新验证；记录实际偏差，不虚构失败或重试。
 - 用户需要亲自阅读上下文规则和生成代码。代理不得用自动检查代替这两个步骤。
