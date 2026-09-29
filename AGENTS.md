@@ -1,6 +1,6 @@
 # CampusHub: AI Development Rules
 
-This file applies to the entire `campushub-backend` repository and provides version-controlled context for the CS 5500 semester project.
+This file applies to the entire `campushub-backend` repository and provides version-controlled context for the CS 5500 semester project. The Lab 2 OpenAPI contract in `docs/openapi.json` governs current API behavior.
 Read this file, the user's current request, and the relevant code before starting work. Stay within the scope authorized by the user.
 
 ## 1. Human Review and Rule Changes
@@ -37,10 +37,12 @@ Do not combine multiple layers' responsibilities in one file, even for a simple 
 | `src/models/`      | Define and export Mongoose schemas, data interfaces, and necessary models                     | Execute queries, handle requests, implement business rules                                       |
 | `src/middleware/`  | Shared HTTP middleware, consistent 404 and error responses                                    | Business rules, database queries                                                                 |
 | `src/interfaces/`  | Request, response, business data, and function contracts                                      | Executable logic with side effects                                                               |
-| `src/types/`       | TypeScript declarations and necessary third-party type extensions                             | Application runtime logic                                                                        |
+| `src/types/`       | Type-only domain contracts (including Lab 2 reservation.ts) and third-party type extensions   | Application runtime logic                                                                        |
 
 - Do not introduce unused classes, generic base classes, dependency injection containers, or additional architectural layers.
-- Lab 1 does not require database connections or queries. Mongoose is installed for later project work. The health check must not depend on MongoDB.
+- Lab 2 uses minimal in-memory Services for local testing. Do not connect to MongoDB. Define typed Mongoose schemas for future persistence; the health check must remain independent of MongoDB.
+- Shared pure input guards may live in `src/validation/`. They have no HTTP responses, database access, or mutable business state.
+- `src/types/reservation.ts` contains the Lab 2 domain interfaces requested by the assignment; it must contain only type declarations. Health-specific interfaces remain in `interfaces/`.
 - During persistence work, all Mongoose reads and writes, including `find`, `findOne`, `create`, `save`, updates, deletes, and aggregation, must reside in `services/`. Controllers call Services; Model files only define and export schemas, interfaces, and models without executing queries.
 - The course brief describes Services as "pure business logic". In this project that means Services contain no HTTP concerns (no Express objects, status codes, or response envelopes) and are the only layer that calls Mongoose Models. This still satisfies the brief's rule that Controllers make no direct database queries.
 - **Do not introduce the Repository pattern at this stage.** If it becomes necessary, explain the reason and obtain user approval before updating this file, directory conventions, and lint boundaries together. Do not leave contradictory architectural rules in place.
@@ -51,39 +53,19 @@ Do not combine multiple layers' responsibilities in one file, even for a simple 
 
 - Even the health-check endpoint must follow **Route → Controller → Service**, with a `HealthResponse` data interface in `interfaces/`.
 - Use one ordinary synchronous Service function to return a plain status object: `{ status: 'ok', timestamp: string }`. Generate the timestamp for each call as a UTC ISO 8601 string, for example with `new Date().toISOString()`.
-- The Controller calls the Service and applies the JSON envelope defined below. The Route only maps to the Controller.
+- The Controller calls the Service and returns its status object using the JSON contract below. The Route only maps to the Controller.
 - Do not add a `HealthService` class, a corresponding `IHealthService`, factories, mock adapters, or unnecessary forwarding layers. Keep only the required layer files and data interfaces.
 - Do not add simulated delays, periodic heartbeats, heartbeat libraries, database probes, or unrelated dependencies.
 
 ### Consistent Controller JSON Responses
 
-- All JSON endpoints must use the following structures. Do not mix bare objects, bare arrays, or different top-level fields:
-
-```typescript
-// Defined centrally in src/interfaces/api-response.interface.ts.
-export interface ApiSuccess<T> {
-  success: true;
-  data: T;
-}
-
-export interface ApiError {
-  code: string;
-  message: string;
-}
-
-export interface ApiFailure {
-  success: false;
-  error: ApiError;
-}
-```
-
-- Controllers wrap successful results as `{ success: true, data: serviceResult }`. Services do not return HTTP envelopes. Place lists inside `data`, not in a top-level array.
-- Validation failures, missing resources, unmatched routes, and centralized error middleware return `{ success: false, error: { code, message } }`. Use a stable, machine-readable `code` and a safe, user-facing `message`.
-- HTTP status codes must reflect the outcome: `200` for reads and health checks, `201` for creation, `400` for invalid input, `404` for missing resources, and `500` for unexpected internal errors. Never disguise a failure with HTTP `200`; use other status codes according to their semantics.
-- Operations explicitly requiring `204 No Content` return no body; this is not an alternative JSON format. The lab health check always returns `200` JSON.
-- The external health response has the shape `{ success: true, data: { status: 'ok', timestamp: string } }`.
-- Unexpected internal errors use the safe `INTERNAL_ERROR` code and a generic message. Do not expose stack traces, database details, or sensitive configuration to clients.
-- Share only the necessary response interfaces. Do not introduce generic response builders, response base classes, or decorator frameworks at this stage.
+- Follow `docs/openapi.json` as the authoritative Lab 2 contract. Successful endpoints return their domain object or array directly; do not wrap responses in `success` or `data`.
+- All error responses use the shared `ErrorResponse` interface from `src/types/reservation.ts`: `{ code: string, message: string }`. Do not wrap errors in `error`.
+- Controllers own HTTP status codes and error mapping. Services return typed domain results without Express objects, HTTP codes, or response envelopes.
+- Use `200` for successful reads and health, `201` for a created reservation, `400` for invalid input, `404` for missing resources/routes, `409` for booking conflicts/unavailable resources, `413` for oversized bodies, `415` for unsupported request media, and `500` for unexpected errors. Document each implemented response in the contract.
+- Health returns `{ status: 'ok', timestamp: string }`. All other success shapes must match their referenced OpenAPI schemas.
+- Unexpected failures use `INTERNAL_ERROR` and a generic message. Never disclose stacks, database details, request bodies, or sensitive configuration to clients.
+- Keep response handling explicit and small; do not add generic builders, base classes, or decorators.
 
 ## 4. Type Safety and Coding Standards
 
@@ -125,6 +107,15 @@ export interface ApiFailure {
 - **Never privately change `tsconfig.json` or ESLint ignore entries to make a failure appear to pass.** Do not lower rule severity, add `eslint-disable`, narrow the checked file scope, use `@ts-ignore`/`any`, or change scripts to skip checks. If a configuration change is genuinely needed, present the evidence, impact, and proposed diff first and obtain explicit user approval for that change.
 - Passing type checks and compilation does not replace actual HTTP verification.
 - `dev` and `start` run `src/server.ts` and `dist/server.js`, respectively. Start them and request the endpoint before claiming runtime verification passed.
-- After generating Part 3 code, run `npm run dev` and request `GET /api/v1/health`. Confirm HTTP `200`, the standard success JSON envelope, `data.status` equal to `ok`, and a valid UTC ISO 8601 `data.timestamp`; also review layering and types.
+- After generating Part 3 code, run `npm run dev` and request `GET /api/v1/health`. Confirm HTTP `200`, `status` equal to `ok`, and a valid UTC ISO 8601 `timestamp`; also review layering and types.
 - If generated code violates a boundary, correct the rules or implementation and verify again. Record actual deviations rather than inventing failures or retries.
 - The user must personally read both the context rules and generated code. Automated checks cannot replace either review.
+
+## 8. Lab 2 Contract and Verification
+
+- Maintain `docs/openapi.json` before changing endpoint behavior. Keep request validation, interfaces, Mongoose schemas, and HTTP responses consistent with it.
+- Preserve Route → Controller → Service for the three required resources/reservations endpoints. Store local-test data only in Services; never in a Router or Controller.
+- Validate `unknown` inputs before passing typed data to Services. Reject missing/unexpected fields, malformed dates, invalid intervals, and invalid query values with contract errors.
+- Overlap uses half-open intervals for the same resource. Non-cancelled overlapping reservations block creation; adjacent intervals do not.
+- Run `npm test`, contract validation, `npm run check`, and `npm run build`, plus development and compiled HTTP smoke checks before claiming Lab 2 verified.
+- The built-in Node test runner requires no added dependency. Tests in `src/tests/` are included in existing compiler/lint coverage; do not mount them in the application.

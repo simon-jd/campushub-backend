@@ -1,0 +1,468 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "CampusHub Reservation API",
+    "version": "1.0.0",
+    "description": "CS 5500 Lab 2: local in-memory resource reservations. Responses are direct objects/arrays and errors are {code, message}. Data resets on process restart; there is no authentication, MongoDB connection, or cross-process persistence. Unmatched routes return 404 ErrorResponse. Calendar validity and interval ordering are checked at runtime in addition to schema formats.",
+    "license": {
+      "name": "UNLICENSED"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api/v1",
+      "description": "Local development server (binds to 127.0.0.1)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Resources",
+      "description": "Campus resource catalog."
+    },
+    {
+      "name": "Reservations",
+      "description": "Local resource bookings."
+    },
+    {
+      "name": "Health",
+      "description": "HTTP liveness."
+    }
+  ],
+  "security": [],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "tags": ["Health"],
+        "summary": "Check HTTP service liveness",
+        "description": "Does not connect to or probe a database.",
+        "responses": {
+          "200": {
+            "description": "The HTTP service is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "status": "ok",
+                  "timestamp": "2026-10-01T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/resources": {
+      "get": {
+        "operationId": "listResources",
+        "tags": ["Resources"],
+        "summary": "List resources, optionally filtered by type",
+        "description": "Returns the local resource catalog. STUDY_ROOM is a query-only alias for ROOM to support the assignment curl example. Unknown query parameters and repeated type values are rejected.",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Exactly one non-empty resource type; STUDY_ROOM maps to ROOM.",
+            "schema": {
+              "type": "string",
+              "enum": ["ROOM", "EQUIPMENT", "LAB", "STUDY_ROOM"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching resources; an array, without an envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Resource"
+                  }
+                },
+                "example": [
+                  {
+                    "id": "res-101",
+                    "name": "Study Room 302",
+                    "type": "ROOM",
+                    "location": "Library, Floor 3",
+                    "isAvailable": true
+                  }
+                ]
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/reservations": {
+      "post": {
+        "operationId": "createReservation",
+        "tags": ["Reservations"],
+        "summary": "Create a time-slotted reservation",
+        "description": "Creates a CONFIRMED reservation in memory. Any non-cancelled reservation for the same resource with an overlapping time interval causes 409. A syntactically valid userId is accepted without a user database. Unknown query parameters are rejected. Only uncompressed JSON request bodies are supported; compressed Content-Encoding values return 415.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReservationRequest"
+              },
+              "example": {
+                "resourceId": "res-101",
+                "userId": "user-456",
+                "startTime": "2026-10-01T10:00:00Z",
+                "endTime": "2026-10-01T11:00:00Z"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The newly created reservation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reservation"
+                },
+                "example": {
+                  "id": "eecdbed0-907b-4737-860b-a6b22f6f85e0",
+                  "resourceId": "res-101",
+                  "userId": "user-456",
+                  "startTime": "2026-10-01T10:00:00Z",
+                  "endTime": "2026-10-01T11:00:00Z",
+                  "status": "CONFIRMED"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/reservations/user/{userId}": {
+      "get": {
+        "operationId": "listUserReservations",
+        "tags": ["Reservations"],
+        "summary": "List active reservations for one user",
+        "description": "Active means PENDING or CONFIRMED with endTime later than the current time. Only the requested user is included. Returns [] when none exist. Unknown query parameters are rejected.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "description": "The student identifier.",
+            "schema": {
+              "$ref": "#/components/schemas/Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active reservations for this user, in creation order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Reservation"
+                  }
+                },
+                "example": [
+                  {
+                    "id": "eecdbed0-907b-4737-860b-a6b22f6f85e0",
+                    "resourceId": "res-101",
+                    "userId": "user-456",
+                    "startTime": "2026-10-01T10:00:00Z",
+                    "endTime": "2026-10-01T11:00:00Z",
+                    "status": "CONFIRMED"
+                  }
+                ]
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Identifier": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+      },
+      "Timestamp": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(\\.\\d{1,3})?(Z|[+-]([01]\\d|2[0-3]):[0-5]\\d)$",
+        "description": "Calendar-valid ISO 8601 / RFC 3339 timestamp with uppercase T, seconds, Z or numeric offset, and optional 1\u20133 fractional digits. Years 0001\u20139999; no leap seconds. Responses normalize to UTC milliseconds.",
+        "example": "2026-10-01T10:00:00Z"
+      },
+      "User": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          }
+        },
+        "description": "Minimal user data model for future persistence; no user management or authentication endpoint is implemented in Lab 2."
+      },
+      "Resource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "type", "location", "isAvailable"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "\\S"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["ROOM", "EQUIPMENT", "LAB"]
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "\\S"
+          },
+          "isAvailable": {
+            "type": "boolean",
+            "description": "Operational availability, not whether every time slot is free."
+          }
+        }
+      },
+      "CreateReservationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resourceId", "userId", "startTime", "endTime"],
+        "properties": {
+          "resourceId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "userId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "startTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "endTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "description": "Client-supplied fields only. startTime must be earlier than endTime. The server assigns id and status. Past intervals are allowed for this local lab; they are excluded from active results once ended."
+      },
+      "Reservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "resourceId", "userId", "startTime", "endTime", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resourceId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "userId": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "startTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "endTime": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "CONFIRMED", "CANCELLED"]
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "VALIDATION_ERROR",
+              "RESOURCE_NOT_FOUND",
+              "RESOURCE_UNAVAILABLE",
+              "DOUBLE_BOOKING",
+              "NOT_FOUND",
+              "PAYLOAD_TOO_LARGE",
+              "UNSUPPORTED_MEDIA_TYPE",
+              "INTERNAL_ERROR"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "timestamp"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok"]
+          },
+          "timestamp": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid query, path, JSON body, timestamp, or interval.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "VALIDATION_ERROR",
+              "message": "Request input is invalid."
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The requested route or resource does not exist.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "RESOURCE_NOT_FOUND",
+              "message": "The resource was not found."
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The resource is unavailable or a non-cancelled reservation overlaps this half-open interval [startTime, endTime). Adjacent intervals are allowed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "overlap": {
+                "value": {
+                  "code": "DOUBLE_BOOKING",
+                  "message": "Resource is already reserved for this time slot."
+                }
+              },
+              "unavailable": {
+                "value": {
+                  "code": "RESOURCE_UNAVAILABLE",
+                  "message": "The resource is unavailable."
+                }
+              }
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Request body exceeds the 16 KiB JSON limit.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "PAYLOAD_TOO_LARGE",
+              "message": "The JSON body exceeds the 16 KiB limit."
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Reservation creation requires uncompressed application/json with supported JSON character encoding.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "UNSUPPORTED_MEDIA_TYPE",
+              "message": "Content-Type must be application/json."
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Unexpected server error; no internal details are exposed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "INTERNAL_ERROR",
+              "message": "An unexpected error occurred."
+            }
+          }
+        }
+      }
+    }
+  }
+}
