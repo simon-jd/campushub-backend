@@ -3,10 +3,9 @@
 This file applies to the entire `campushub-backend` repository and provides version-controlled context for the CS 5500 semester project.
 Read this file, the user's current request, and the relevant code before starting work. Stay within the scope authorized by the user.
 
-## 1. Current Stage and Human Review
+## 1. Human Review and Rule Changes
 
-- The user reviewed and approved these rules and authorized the Part 3 Express server and health-check implementation.
-- The user has also reviewed the generated code and confirmed that there are no concerns.
+- Record review status and one-time verification results in `docs/`, for example `docs/lab1-verification.md`, never in this file. This file holds only standing rules.
 - Never record agent self-checks, tool results, or another agent's review as human approval. Record the actual review status.
 - Explain the reason and impact of future rule changes. Never silently remove constraints, disable rules, or reduce strictness to eliminate check failures.
 
@@ -43,6 +42,7 @@ Do not combine multiple layers' responsibilities in one file, even for a simple 
 - Do not introduce unused classes, generic base classes, dependency injection containers, or additional architectural layers.
 - Lab 1 does not require database connections or queries. Mongoose is installed for later project work. The health check must not depend on MongoDB.
 - During persistence work, all Mongoose reads and writes, including `find`, `findOne`, `create`, `save`, updates, deletes, and aggregation, must reside in `services/`. Controllers call Services; Model files only define and export schemas, interfaces, and models without executing queries.
+- The course brief describes Services as "pure business logic". In this project that means Services contain no HTTP concerns (no Express objects, status codes, or response envelopes) and are the only layer that calls Mongoose Models. This still satisfies the brief's rule that Controllers make no direct database queries.
 - **Do not introduce the Repository pattern at this stage.** If it becomes necessary, explain the reason and obtain user approval before updating this file, directory conventions, and lint boundaries together. Do not leave contradictory architectural rules in place.
 - Database connection and disconnection belong to startup lifecycle management, not business queries. A future startup entry point may call a connection configuration module; business reads and writes remain confined to Services. Do not create that module for this lab.
 - Import direction and responsibilities require manual review. Current lint rules cover only some direct imports; they do not prove complete architectural compliance.
@@ -90,7 +90,7 @@ export interface ApiFailure {
 - Preserve `strict: true`, `allowJs: false`, `noEmitOnError: true`, and the existing strict compiler checks.
 - Explicitly type every function and method parameter and return value. Async functions must specify `Promise<T>`.
 - Define named interfaces for custom structured inputs, outputs, request/response bodies, and database records. Do not obscure contracts with anonymous object shapes or overly broad object types.
-- Describe function signatures through explicit parameter/return types and named data interfaces. Ordinary functions do not require an additional callable interface. Add a function interface only when a callable contract must actually be reused or substituted. Use existing Express callback types with the relevant generic arguments; use primitive types such as `string` and `number` directly.
+- Define interfaces for all function signatures and DB schemas as follows: every parameter and return type is explicit, and every structured parameter, return value, and schema shape is a named interface. Ordinary functions do not require an additional callable interface. Add a function interface only when a callable contract must actually be reused or substituted. Use existing Express callback types with the relevant generic arguments; use primitive types such as `string` and `number` directly.
 - Parameterize Mongoose schemas and models with their corresponding data interfaces so that the definitions remain consistent.
 - Do not use explicit or implicit `any`, `as any`, double assertions, `@ts-ignore`, or disabled lint rules to bypass checks.
 - Treat external input and unknown errors as `unknown`, then narrow them with runtime checks. A type assertion is not input validation.

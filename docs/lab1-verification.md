@@ -2,6 +2,8 @@
 
 ## Scope and Status
 
+This section is the single record of review status. It previously also appeared in AGENTS.md section 1, which now holds only standing rules.
+
 - Authorization: the user approved the revised rules and requested execution of Part 3.
 - Human review of AGENTS.md: **completed**.
 - Express application, startup entry point, and health check: **implemented**.
