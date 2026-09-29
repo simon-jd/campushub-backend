@@ -75,7 +75,7 @@ A fresh independent agent reviewed the complete code, contract, layering, and te
 
 The parser now runs only on `POST /reservations` and rejects compressed bodies with `415`. Both regressions failed before the change and passed afterward, followed by the full 20/20 source and compiled suites and the 18 entry-point smoke scenarios. The optional review suggestion to check state after failed resource bookings was also included. No review findings remain deferred.
 
-The reviewer did not independently verify final test commands, the final documentation, publication, Canvas submission, human approval, distributed persistence, or authentication. The parent verified the first three locally; remote publication is verified during delivery. Canvas submission and human approval remain unperformed, and distributed persistence/authentication remain explicitly outside this local lab's scope. Automated or agent review is not human approval.
+The reviewer did not independently verify final test commands, the final documentation, publication, Canvas submission, human approval, distributed persistence, or authentication. The parent verified the first three locally; implementation commit `e3041dd3af60e29518a3534efcf40f3df2818564` was pushed to `main` at the [Khoury repository](https://github.khoury.northeastern.edu/postedism/campushub-backend), and `git ls-remote` matched the local commit. Canvas submission and human approval remain unperformed, and distributed persistence/authentication remain explicitly outside this local lab's scope. Automated or agent review is not human approval.
 
 ## References Used During Implementation
 
