@@ -55,8 +55,8 @@ export default defineConfig(
       'no-restricted-imports': [
         'error',
         {
-          paths: ['express', 'mongoose', 'mongodb'],
-          patterns: ['**/controllers/**', '**/routes/**', '**/models/**'],
+          paths: ['express', 'mongodb'],
+          patterns: ['**/controllers/**', '**/routes/**'],
         },
       ],
     },

@@ -5,7 +5,7 @@ CS 5500 学期项目后端，采用 TypeScript、Express 和 Mongoose。
 ## 当前进度
 
 Lab 1 初始化阶段：Git 仓库、依赖、TypeScript/lint/格式配置和目录骨架已建立。
-[AGENTS.md](AGENTS.md) 是待用户审阅的规则初稿。
+[AGENTS.md](AGENTS.md) 已按用户首轮审阅意见修订，修订版待用户确认。
 
 **尚未生成 Express 应用、启动入口或健康检查接口。** 用户审阅规则后再进行 Lab Part 3。
 `src/types/environment.d.ts` 仅声明环境变量类型，不包含服务逻辑。
@@ -41,7 +41,7 @@ Lab 1 初始化阶段：Git 仓库、依赖、TypeScript/lint/格式配置和目
 src/
 ├── routes/       路径与中间件映射
 ├── controllers/  HTTP 请求和响应
-├── services/     纯业务逻辑
+├── services/     业务逻辑与 Mongoose 查询
 ├── models/       Mongoose schema 和数据定义
 ├── interfaces/   数据与函数契约
 └── types/        类型声明
@@ -49,6 +49,11 @@ src/
 
 后续 `src/app.ts` 负责组装应用，`src/server.ts` 负责读取配置和启动监听。
 详细边界、白名单和验收要求见 [AGENTS.md](AGENTS.md)。
+
+持久化读写由 Service 唯一负责，当前不使用 Repository 模式。
+Controller 成功响应统一为 `{ success: true, data: ... }`，失败响应统一为
+`{ success: false, error: { code, message } }`，并使用对应的 HTTP 状态码。
+Health 也保留 Route → Controller → Service 和响应数据接口，Service 只返回状态与时间戳。
 
 ## 人工审阅
 

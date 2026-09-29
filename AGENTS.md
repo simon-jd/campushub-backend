@@ -5,7 +5,7 @@
 
 ## 1. 当前阶段与人类审阅
 
-- 当前只完成 Lab 1 的项目初始化；本文件为**待用户审阅的初稿**。
+- 当前只完成 Lab 1 的项目初始化；本文件已按用户首轮审阅意见修订，**修订版待用户确认**。
 - 用户审阅规则之后，才能执行 Part 3 的 Express 服务器和健康检查生成任务。
 - 不把代理自检、工具检查或其他代理审阅记作用户已审阅；如实记录实际状态。
 - 后续修改规则时说明原因和影响。不得为消除检查错误而静默删除约束、关闭规则或降低严格度。
@@ -25,31 +25,71 @@
 
 ## 3. 架构边界
 
-业务调用方向为 **Routes → Controllers → Services**；Models 单独承载数据定义。
+业务调用方向为 **Routes → Controllers → Services → Models**；Models 承载数据定义，Service 是 Mongoose 查询调用的唯一宿主。
 不得为了一个简单端点把多个层的职责放进同一文件。
 
-| 位置               | 允许的职责                                                     | 禁止的职责                                                   |
-| ------------------ | -------------------------------------------------------------- | ------------------------------------------------------------ |
-| `src/app.ts`       | 创建 Express 应用，挂载公共中间件和路由，导出应用              | 监听端口、业务逻辑、数据库查询                               |
-| `src/server.ts`    | 读取和验证启动配置，启动监听，处理启动失败                     | 定义路由或业务规则                                           |
-| `src/routes/`      | 路径、HTTP 方法、已有 Controller 和中间件的映射                | 内联业务逻辑、直接调用 Service、数据库访问                   |
-| `src/controllers/` | 读取和验证 HTTP 输入，调用 Service，设置状态码和响应，转交错误 | 导入或调用 Mongoose Model、直接数据库查询、业务规则          |
-| `src/services/`    | 纯业务逻辑，接收和返回有类型的普通数据                         | Express 请求/响应对象、HTTP 状态码、路由注册、直接数据库操作 |
-| `src/models/`      | Mongoose schema、数据 interface 与必要的 model 定义及导出      | 查询执行、请求处理、业务规则                                 |
-| `src/interfaces/`  | 请求、响应、业务数据和函数契约                                 | 有副作用的可执行逻辑                                         |
-| `src/types/`       | TypeScript 声明和必要的第三方类型扩展                          | 应用运行时逻辑                                               |
+| 位置               | 允许的职责                                                        | 禁止的职责                                                  |
+| ------------------ | ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| `src/app.ts`       | 创建 Express 应用，挂载公共中间件和路由，导出应用                 | 监听端口、业务逻辑、数据库查询                              |
+| `src/server.ts`    | 读取和验证启动配置，启动监听，处理启动失败                        | 定义路由或业务规则                                          |
+| `src/routes/`      | 路径、HTTP 方法、已有 Controller 和中间件的映射                   | 内联业务逻辑、直接调用 Service、数据库访问                  |
+| `src/controllers/` | 读取和验证 HTTP 输入，调用 Service，设置状态码和响应，转交错误    | 导入或调用 Mongoose Model、直接数据库查询、业务规则         |
+| `src/services/`    | 业务逻辑与持久化操作，调用 Mongoose Model，接收和返回有类型的数据 | Express 请求/响应对象、HTTP 状态码、路由注册、HTTP 响应包装 |
+| `src/models/`      | Mongoose schema、数据 interface 与必要的 model 定义及导出         | 查询执行、请求处理、业务规则                                |
+| `src/interfaces/`  | 请求、响应、业务数据和函数契约                                    | 有副作用的可执行逻辑                                        |
+| `src/types/`       | TypeScript 声明和必要的第三方类型扩展                             | 应用运行时逻辑                                              |
 
 - 不创建暂时无用的类、通用基类、依赖注入容器或额外架构层。
 - Lab 1 不需要数据库连接或查询；Mongoose 为后续项目准备。健康检查不得依赖 MongoDB。
-- 以后确需持久化时，先与用户更新数据访问边界；不要擅自把查询塞进 Controller、Service 或 schema 文件。
+- 持久化阶段的 `find`、`findOne`、`create`、`save`、更新、删除、聚合等 Mongoose 读写调用只允许出现在 `services/`；Controller 只调用 Service，Model 文件只定义和导出 schema/interface/model，不执行查询。
+- 当前明确**不引入 Repository 模式**。将来确有需求时，先说明理由并经用户批准同步修改本文件、目录约定和 lint 边界，不能同时保留互相矛盾的两套规则。
+- 连接与断开数据库属于启动生命周期，不属于业务查询；未来可由启动入口调用连接配置模块，业务读写仍只能由 Service 执行。本次不创建连接模块。
 - 导入方向和职责需要人工检查。当前 lint 只覆盖部分直接导入，不代表可自动证明全部架构边界。
+
+### Health Check 的最小实现
+
+- 即便健康检查端点也必须遵守 **Route → Controller → Service**，并在 `interfaces/` 中定义响应数据接口 `HealthResponse`。
+- Service 用一个普通同步函数返回普通状态对象：`{ status: 'ok', timestamp: string }`，其中时间戳为本次调用生成的 UTC ISO 8601 字符串，例如 `new Date().toISOString()`。
+- Controller 只调用 Service，再按下一节的统一 JSON 结构包装；Route 只映射 Controller。
+- 不创建 `HealthService` 类、配套的 `IHealthService`、工厂、模拟适配器或多余的转发层；保留必要的分层文件和数据接口即可。
+- 不引入模拟延迟、定时心跳、心跳检测库、数据库探活或任何无关依赖。
+
+### Controller 的统一 JSON 响应
+
+- 所有返回 JSON 的端点统一使用以下结构，不混用裸对象、裸数组或不同的顶层字段：
+
+```typescript
+// 后续实现时统一定义在 interfaces/api-response.interface.ts。
+export interface ApiSuccess<T> {
+  success: true;
+  data: T;
+}
+
+export interface ApiError {
+  code: string;
+  message: string;
+}
+
+export interface ApiFailure {
+  success: false;
+  error: ApiError;
+}
+```
+
+- 成功由 Controller 包装为 `{ success: true, data: serviceResult }`；Service 不返回 HTTP 包装。列表放在 `data` 中，不直接返回顶层数组。
+- 验证失败、资源不存在、未匹配路由和统一错误处理中间件均返回 `{ success: false, error: { code, message } }`。`code` 是稳定的机器可读标识，`message` 是可安全展示的说明。
+- HTTP 状态码反映真实结果：读取与健康检查为 `200`、创建为 `201`、输入错误为 `400`、资源不存在为 `404`、未知内部错误为 `500`。不得用 HTTP `200` 包装失败；其他状态按语义使用。
+- 明确需要 `204 No Content` 的操作不返回响应体；这不是另一种 JSON 格式。Lab 健康检查始终返回 `200` JSON。
+- Health 的外部响应形状为 `{ success: true, data: { status: 'ok', timestamp: string } }`。
+- 未知内部错误统一使用安全的 `INTERNAL_ERROR` code 和通用说明，不向客户端泄漏堆栈、数据库细节或敏感配置。
+- 只共享必要的响应接口；当前不建立通用响应构建器、响应基类或装饰器框架。
 
 ## 4. 类型与编码标准
 
 - 保持 `strict: true`、`allowJs: false`、`noEmitOnError: true` 及已有严格检查选项。
 - 所有函数和方法的参数与返回值必须明确标注类型；异步函数明确返回 `Promise<T>`。
 - 为自定义结构化输入、输出、请求/响应体和数据库记录声明有名字的 `interface`，不要用匿名对象形状或宽泛对象掩盖契约。
-- 自定义函数契约使用具名可调用 `interface`；框架回调可使用已有 Express 类型，并补齐项目相关的泛型参数。原始值可直接使用 `string`、`number` 等类型，不人为包一层对象。
+- 函数签名由显式参数/返回类型及具名数据 interface 描述；普通函数不强制再声明一个可调用 interface。仅在实际需要复用或替换调用契约时增加函数接口。框架回调使用已有 Express 类型并补齐项目相关的泛型参数；原始值直接使用 `string`、`number` 等类型。
 - Mongoose schema 与 model 使用对应的数据 interface 作为泛型参数，保证定义一致。
 - 禁止显式 `any`、隐式 `any`，以及通过 `as any`、双重断言、`@ts-ignore` 或关闭 lint 来绕过检查。
 - 外部输入和未知异常使用 `unknown`，经运行时检查收窄。类型断言不等同于输入验证。
@@ -77,9 +117,13 @@
 ## 7. 检查与完成声明
 
 - 修改完成后运行 `npm run check` 和 `npm run build`，读取结果再报告。
-- 若检查失败，查明原因并修复；有未解决的失败时，明确报告命令和错误，不宣称全部通过。
+- 当 `npm run check` 或 `npm run build` 失败时，必须依次执行：
+  1. 输出失败命令、原始诊断和具体文件路径、行号、列号、错误码或规则名；工具提供错误堆栈时展示堆栈。工具未提供堆栈或位置时明确说明，不编造；敏感值须脱敏。
+  2. 分析根因：明确是否是 TypeScript 类型收窄/空值处理/接口不匹配，或跨层访问等分层违规；若属于格式、依赖或工具配置问题，如实单列，不强行归入前两类。
+  3. 修复导致失败的类型处理、职责放置或具体代码，再重新执行原失败命令及必要检查；如有剩余失败逐项报告。
+- **禁止私自修改 `tsconfig.json` 或 ESLint 忽略项来“假装通过”**；同样禁止降低规则级别、增加 `eslint-disable`、缩小检查文件范围、使用 `@ts-ignore`/`any` 或修改脚本跳过检查。配置确需变更时，先展示证据、影响和拟议差异，取得用户对该变更的明确批准。
 - 当前只有环境类型声明；类型检查和构建通过仅证明初始化配置可用，不代表 Express 服务已经实现。
 - `dev` 和 `start` 已预置为后续 `src/server.ts` / `dist/server.js` 入口；入口生成之前不能声称服务已启动。
-- Part 3 生成代码后，运行 `npm run dev`，实际请求 `GET /api/v1/health`，确认状态码为 `200`、响应为 JSON，并复查代码的分层和类型。
+- Part 3 生成代码后，运行 `npm run dev`，实际请求 `GET /api/v1/health`，确认状态码为 `200`、响应为统一成功 JSON，`data.status` 为 `ok`、`data.timestamp` 为有效的 UTC ISO 8601 时间戳，并复查代码的分层和类型。
 - 如果生成结果越界，修正规则或实现后重新验证；记录实际偏差，不虚构失败或重试。
 - 用户需要亲自阅读上下文规则和生成代码。代理不得用自动检查代替这两个步骤。
