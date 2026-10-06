@@ -1,24 +1,32 @@
 # CampusHub Backend
 
 CS 5500 CampusHub backend using TypeScript, Express, and Mongoose.
-Lab 2 implements an OpenAPI contract and a local in-memory reservation engine.
+Lab 2 defined the OpenAPI contract; Lab 3 persists resources and reservations in MongoDB
+behind an isolated Routes → Controllers → Services → Models architecture.
 
 ## Setup
 
-- Node.js `>=24.21.0`, npm `>=11.19.1`.
+- Node.js `>=24.21.0`, npm `>=11.19.1`, and a reachable MongoDB server (local default `mongodb://127.0.0.1:27017`).
 - Run `npm ci` in this directory.
-- Optionally copy `.env-example` to `.env` if `.env` does not already exist.
+- Copy `.env-example` to `.env` if `.env` does not already exist, then adjust values if needed.
+- Start MongoDB, for example `brew services start mongodb/brew/mongodb-community`.
+- Run `npm run seed` once to load the sample resource catalog.
 - Run `npm run dev`, or `npm run build` followed by `npm start`.
 
-The server binds to `127.0.0.1`; `PORT` defaults to `3000` and must be an integer from 1 to 65535.
-A database is **not required**. Stop the development watcher with Ctrl+C.
+| Variable          | Default                     | Purpose                                                      |
+| ----------------- | --------------------------- | ------------------------------------------------------------ |
+| `PORT`            | `3000`                      | HTTP port on `127.0.0.1`; integer from 1 to 65535            |
+| `MONGODB_URI`     | `mongodb://127.0.0.1:27017` | MongoDB connection string (`mongodb://` or `mongodb+srv://`) |
+| `MONGODB_DB_NAME` | `campushub`                 | Database name; overrides any database path in the URI        |
+
+All environment variables are read and validated only in [src/config/environment.ts](src/config/environment.ts).
+The server connects to MongoDB **before** it listens; if the database is unreachable it exits with an error after 5 seconds.
+Stop the development watcher with Ctrl+C, which closes the HTTP server and the database connection.
 
 ## Contract and Endpoints
 
 [docs/openapi.json](docs/openapi.json) is the authoritative OpenAPI 3.0.3 contract.
-At the user's instruction, Lab 2 takes precedence over Lab 1's response envelopes:
-successes return objects or arrays directly, and all errors return `{ "code": "...", "message": "..." }`.
-The existing health endpoint follows the same direct-object convention.
+Successes return objects or arrays directly, and all errors return `{ "code": "...", "message": "..." }`.
 
 | Method | Path                                 | Success                        | Relevant errors                          |
 | ------ | ------------------------------------ | ------------------------------ | ---------------------------------------- |
@@ -28,6 +36,7 @@ The existing health endpoint follows the same direct-object convention.
 | GET    | `/api/v1/reservations/user/{userId}` | `200` active reservation array | `400`, `500`                             |
 
 Unknown routes return `404 NOT_FOUND`. Application errors never expose internal stacks to clients.
+Health does not probe MongoDB.
 
 ### Resources
 
@@ -42,12 +51,15 @@ Domain types are `ROOM`, `EQUIPMENT`, and `LAB`.
 `STUDY_ROOM` is a query-only alias for `ROOM`, supporting the assignment's example while preserving its domain enum.
 Empty, repeated, unsupported, or unknown query parameters return `400 VALIDATION_ERROR`.
 
-| ID        | Resource         | Type      | Operationally available |
-| --------- | ---------------- | --------- | ----------------------- |
-| `res-101` | Study Room 302   | ROOM      | Yes                     |
-| `res-102` | 3D Printer A     | EQUIPMENT | Yes                     |
-| `res-103` | Computer Lab 201 | LAB       | Yes                     |
-| `res-104` | Study Room 304   | ROOM      | No                      |
+`npm run seed` upserts this catalog. IDs are MongoDB ObjectIds; fixed values mirror Lab 2's `res-101`…`res-104`
+so manual requests stay copyable, and reseeding never changes an existing ID.
+
+| ID                         | Resource         | Type      | Operationally available |
+| -------------------------- | ---------------- | --------- | ----------------------- |
+| `000000000000000000000101` | Study Room 302   | ROOM      | Yes                     |
+| `000000000000000000000102` | 3D Printer A     | EQUIPMENT | Yes                     |
+| `000000000000000000000103` | Computer Lab 201 | LAB       | Yes                     |
+| `000000000000000000000104` | Study Room 304   | ROOM      | No                      |
 
 ### Reservations
 
@@ -55,14 +67,14 @@ Empty, repeated, unsupported, or unknown query parameters return `400 VALIDATION
 curl -i -X POST 'http://127.0.0.1:3000/api/v1/reservations' \
   -H 'Content-Type: application/json' \
   -d '{
-    "resourceId": "res-101",
+    "resourceId": "000000000000000000000101",
     "userId": "user-456",
-    "startTime": "2026-10-01T10:00:00Z",
-    "endTime": "2026-10-01T11:00:00Z"
+    "startTime": "2099-10-01T10:00:00Z",
+    "endTime": "2099-10-01T11:00:00Z"
   }'
 ```
 
-On a fresh process, this returns `201` with a server-generated UUID, the four submitted fields,
+The first request returns `201` with a server-generated ObjectId `id`, the four submitted fields,
 UTC-normalized timestamps, and `"status": "CONFIRMED"`.
 Repeating it returns `409`:
 
@@ -77,16 +89,18 @@ Repeating it returns `409`:
 curl -i 'http://127.0.0.1:3000/api/v1/reservations/user/user-456'
 ```
 
-Active reservations are `PENDING` or `CONFIRMED` with `endTime` later than the current time.
-The example dates match the assignment; use future dates to see active results after October 1, 2026.
-Another user or a user without active reservations receives `[]`.
+Reservations persist across server restarts. To repeat the manual tests from a clean state,
+drop the reservations collection (for example `mongosh campushub --eval 'db.reservations.drop()'`) and run `npm run seed` again.
 
+- Active reservations are `PENDING` or `CONFIRMED` with `endTime` later than the current time.
+  Another user or a user without active reservations receives `[]`.
 - IDs use 1–64 ASCII letters, digits, underscores, or hyphens, starting with a letter or digit.
+  A `resourceId` that is not an existing resource's ObjectId (including Lab 2's `res-101`) returns `404 RESOURCE_NOT_FOUND`.
 - Creation accepts exactly `resourceId`, `userId`, `startTime`, and `endTime`; clients cannot assign `id` or `status`.
 - Timestamps require a real calendar date, uppercase `T`, seconds, and `Z` or a numeric offset. Optional fractions have 1–3 digits. Supported years are 0001–9999, including after UTC normalization; leap seconds are not accepted.
-- `startTime` must precede `endTime`. Past reservations may be created in this lab but are excluded from active results after they end.
+- `startTime` must precede `endTime`. Past reservations may be created but are excluded from active results after they end.
 - Intervals are half-open: `[startTime, endTime)`. Adjacent bookings are allowed. Overlap on another resource is allowed.
-- A missing resource returns `404 RESOURCE_NOT_FOUND`; an operationally unavailable resource returns `409 RESOURCE_UNAVAILABLE`.
+- An operationally unavailable resource returns `409 RESOURCE_UNAVAILABLE`.
 - Reservation creation requires uncompressed JSON. The parser enforces a 16 KiB limit; malformed JSON returns `400`, oversized input `413`, and unsupported media, charset, or compressed encoding `415`. JSON parsing applies only to reservation creation.
 
 ## Verification
@@ -98,47 +112,48 @@ npm run build
 npx --yes @redocly/cli@2.55.0 lint docs/openapi.json --extends spec
 ```
 
-`npm test` uses Node's built-in test runner, real local HTTP requests, and offline Mongoose validation.
-It needs permission to listen on localhost. No test-framework dependency or running database is needed.
-The response assertions check the schema features used by this contract; Redocly separately validates OpenAPI structure and references.
-The pinned Redocly command runs as a one-off tool and does not change the project's dependency allowlist or lockfile.
+`npm test` uses Node's built-in test runner and real local HTTP requests. The Lab 2 HTTP suite now runs against
+MongoDB: it connects to the configured server, creates a throwaway database named `campushub_test_<pid>`,
+seeds its own fixtures, and drops that database afterward, so development data is never touched.
+MongoDB must be running; tests fail rather than skip when it is not. Model tests validate schemas offline.
+It needs permission to listen on localhost. No test-framework dependency is needed.
 
 `npm run check` runs strict TypeScript, ESLint, and Prettier checks. `npm run build` compiles `src/` to `dist/`.
-Tests are under `src/tests/` so existing type and lint checks cover them without changing compiler scope; they are never imported by the server.
-The compiled suite can also run with `node --test dist/tests/*.test.js` after building.
-See [Lab 2 verification](docs/lab2-verification.md) for observed results and the [implementation plan](docs/superpowers/plans/2026-09-28-lab2.md) for design decisions.
+The compiled suite can also run with `node --env-file-if-exists=.env --test dist/tests/*.test.js` after building.
+See [Lab 3 verification](docs/lab3-verification.md) for observed results and design decisions.
 
 ## Structure and Limits
 
 ```text
 src/
-  app.ts          HTTP composition and route mounting
-  server.ts       Port validation and listener lifecycle
+  app.ts          Express composition, route mounting, and the database connection shell
+  server.ts       Loads config, connects to MongoDB, listens, and shuts down cleanly
+  config/         Environment variable parsing and validation (the only reader of process.env values)
   routes/         HTTP method/path mappings only
-  controllers/    Request validation and HTTP response handling
-  services/       Resource catalog, reservation state, and conflict logic
-  models/         Typed Mongoose schemas and models; no queries
-  types/          Lab 2 domain interfaces and environment declarations
+  controllers/    Request validation and HTTP status/response handling; no Mongoose
+  services/       Business rules and every Mongoose query; no Express
+  models/         Typed Mongoose schemas, exported record interfaces, and models; no queries
+  scripts/        Operational entry points (seed) that call Services
+  types/          API domain interfaces and environment declarations
   interfaces/     Health and internal Service result contracts
   validation/     Shared pure input guards
   middleware/     Safe JSON errors and 404 handling
   tests/          HTTP, schema, and error-handling verification
 ```
 
-Services remain the sole future host of Mongoose queries. No Repository layer is introduced.
-The Mongoose schemas are validated offline and describe future persistence; current requests use in-memory Services.
-Mongoose manages an internal `_id`; API `id` is a separate explicit field. Future persistence must map document internals to API records.
-Unique-index declarations are not proof of database-enforced uniqueness without a connected database and built indexes.
+The API `id` of a resource or reservation is its MongoDB `_id` in hexadecimal; Services map documents to API records.
+`Reservation.resourceId` is stored as an ObjectId reference to `Resource`.
 
-Data resets on restart. Synchronous conflict checking and insertion prevent interleaving in one process;
-this does not provide cross-process or distributed booking protection. There is no authentication or user database lookup.
-Do not deploy this local lab implementation as a production booking system.
+The overlap check and insert are separate database round trips, and standalone MongoDB has no multi-document
+transactions. Bookings for the same resource are therefore serialized inside one server process. This does not
+protect against several server processes sharing one database. There is no authentication or user database lookup.
+Do not deploy this lab implementation as a production booking system.
 
 ## Review and Submission
 
-Lab 1's historical review is recorded in [docs/lab1-verification.md](docs/lab1-verification.md).
-Lab 2 introduces new code and revised responses; its human review must be recorded separately.
-Review `docs/openapi.json` → `src/types/reservation.ts` → validation/Services → Controllers/Routes → models/tests.
+Lab 1 and Lab 2 records are in [docs/lab1-verification.md](docs/lab1-verification.md) and [docs/lab2-verification.md](docs/lab2-verification.md).
+Lab 3's human layer-isolation audit must be recorded separately in [docs/lab3-verification.md](docs/lab3-verification.md).
+Review `docs/openapi.json` → `src/models/` → `src/services/` → `src/controllers/` → `src/routes/` → `src/app.ts` → tests.
 
 School repository: [postedism/campushub-backend](https://github.khoury.northeastern.edu/postedism/campushub-backend).
-Submit the repository URL to the Lab 2 Canvas assignment after reviewing the work.
+Submit the repository URL to the Lab 3 Canvas assignment after reviewing the work.

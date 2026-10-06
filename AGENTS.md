@@ -1,6 +1,6 @@
 # CampusHub: AI Development Rules
 
-This file applies to the entire `campushub-backend` repository and provides version-controlled context for the CS 5500 semester project. The Lab 2 OpenAPI contract in `docs/openapi.json` governs current API behavior.
+This file applies to the entire `campushub-backend` repository and provides version-controlled context for the CS 5500 semester project. The OpenAPI contract in `docs/openapi.json` (created in Lab 2, updated for MongoDB persistence in Lab 3) governs current API behavior.
 Read this file, the user's current request, and the relevant code before starting work. Stay within the scope authorized by the user.
 
 ## 1. Human Review and Rule Changes
@@ -27,27 +27,31 @@ Read this file, the user's current request, and the relevant code before startin
 The application call direction is **Routes → Controllers → Services → Models**. Models define data; Services are the sole location for Mongoose query calls.
 Do not combine multiple layers' responsibilities in one file, even for a simple endpoint.
 
-| Location           | Permitted responsibilities                                                                    | Prohibited responsibilities                                                                      |
-| ------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `src/app.ts`       | Create the Express application, mount shared middleware and routes, export the application    | Listen on a port, business logic, database queries                                               |
-| `src/server.ts`    | Read and validate startup configuration, start listening, handle startup failures             | Route definitions or business rules                                                              |
-| `src/routes/`      | Map paths and HTTP methods to existing Controllers and middleware                             | Inline business logic, direct Service calls, database access                                     |
-| `src/controllers/` | Read and validate HTTP input, call Services, set response status and body, forward errors     | Import or call Mongoose Models, direct database queries, business rules                          |
-| `src/services/`    | Business logic and persistence operations, call Mongoose Models, accept and return typed data | Express request/response objects, HTTP status codes, route registration, HTTP response envelopes |
-| `src/models/`      | Define and export Mongoose schemas, data interfaces, and necessary models                     | Execute queries, handle requests, implement business rules                                       |
-| `src/middleware/`  | Shared HTTP middleware, consistent 404 and error responses                                    | Business rules, database queries                                                                 |
-| `src/interfaces/`  | Request, response, business data, and function contracts                                      | Executable logic with side effects                                                               |
-| `src/types/`       | Type-only domain contracts (including Lab 2 reservation.ts) and third-party type extensions   | Application runtime logic                                                                        |
+| Location           | Permitted responsibilities                                                                                                   | Prohibited responsibilities                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `src/app.ts`       | Create the Express application, mount shared middleware and routes, export the application and the database connection shell | Listen on a port, connect at import time, business logic, database queries                       |
+| `src/server.ts`    | Load configuration through `src/config/`, connect the database, start listening, handle startup failures and shutdown        | Route definitions or business rules                                                              |
+| `src/config/`      | Read, default, and validate environment variables into typed configuration                                                   | Express, Mongoose, connections, business logic                                                   |
+| `src/routes/`      | Map paths and HTTP methods to existing Controllers and middleware                                                            | Inline business logic, direct Service calls, database access                                     |
+| `src/controllers/` | Read and validate HTTP input, call Services, set response status and body, forward errors                                    | Import or call Mongoose Models, direct database queries, business rules                          |
+| `src/services/`    | Business logic and persistence operations, call Mongoose Models, accept and return typed data                                | Express request/response objects, HTTP status codes, route registration, HTTP response envelopes |
+| `src/models/`      | Define and export Mongoose schemas, record interfaces, document types, indexes, and models                                   | Execute queries, handle requests, implement business rules                                       |
+| `src/scripts/`     | Operational entry points such as seeding: load config, connect, call Services, disconnect                                    | Express handling, direct Model queries, business rules                                           |
+| `src/middleware/`  | Shared HTTP middleware, consistent 404 and error responses                                                                   | Business rules, database queries                                                                 |
+| `src/interfaces/`  | Request, response, business data, and function contracts                                                                     | Executable logic with side effects                                                               |
+| `src/types/`       | Type-only domain contracts (including Lab 2 reservation.ts) and third-party type extensions                                  | Application runtime logic                                                                        |
 
 - Do not introduce unused classes, generic base classes, dependency injection containers, or additional architectural layers.
-- Lab 2 uses minimal in-memory Services for local testing. Do not connect to MongoDB. Define typed Mongoose schemas for future persistence; the health check must remain independent of MongoDB.
+- Since Lab 3, Services persist all domain data in MongoDB through Mongoose. Do not keep domain records in memory. The only permitted in-process state is the per-resource booking queue that serializes the overlap check and insert. The health check must remain independent of MongoDB.
+- Model files are named `src/models/<Entity>.model.ts` (for example `Resource.model.ts`). Each exports a named record interface for the stored fields, the schema parameterized with it, and the model. MongoDB `_id` is the API `id`; Services map documents to the API types in `src/types/` and never return Mongoose documents to Controllers.
 - Shared pure input guards may live in `src/validation/`. They have no HTTP responses, database access, or mutable business state.
 - `src/types/reservation.ts` contains the Lab 2 domain interfaces requested by the assignment; it must contain only type declarations. Health-specific interfaces remain in `interfaces/`.
 - During persistence work, all Mongoose reads and writes, including `find`, `findOne`, `create`, `save`, updates, deletes, and aggregation, must reside in `services/`. Controllers call Services; Model files only define and export schemas, interfaces, and models without executing queries.
 - The course brief describes Services as "pure business logic". In this project that means Services contain no HTTP concerns (no Express objects, status codes, or response envelopes) and are the only layer that calls Mongoose Models. This still satisfies the brief's rule that Controllers make no direct database queries.
 - **Do not introduce the Repository pattern at this stage.** If it becomes necessary, explain the reason and obtain user approval before updating this file, directory conventions, and lint boundaries together. Do not leave contradictory architectural rules in place.
-- Database connection and disconnection belong to startup lifecycle management, not business queries. A future startup entry point may call a connection configuration module; business reads and writes remain confined to Services. Do not create that module for this lab.
-- Import direction and responsibilities require manual review. Current lint rules cover only some direct imports; they do not prove complete architectural compliance.
+- Database connection and disconnection belong to startup lifecycle management, not business queries. `src/app.ts` exports `connectDatabase`/`disconnectDatabase`, which take a `DatabaseConfig` from `src/config/`. Importing `app.ts` must never connect; `server.ts`, scripts, and tests decide when to connect. Business reads and writes remain confined to Services.
+- Read environment variables only through `src/config/`. Do not hardcode connection strings, database names, or ports elsewhere; never print a connection string, which may contain credentials.
+- Import direction and responsibilities require manual review. Current lint rules cover only some direct imports (routes, controllers, services, models, config, scripts); they do not prove complete architectural compliance.
 
 ### Minimal Health-Check Implementation
 
@@ -87,6 +91,7 @@ Do not combine multiple layers' responsibilities in one file, even for a simple 
 - Never send another response after a response is complete. Do not return internal stacks or sensitive configuration to clients.
 - Keep simple synchronous logic synchronous; do not add unnecessary async wrappers for demonstration purposes.
 - Default the port to `3000` when unset. Accept only integers from `1–65535` and report invalid configuration clearly.
+- Connect to MongoDB before listening. If startup fails after connecting, close the connection so the process can exit.
 
 ## 6. Environment Files and Version Control
 
@@ -111,11 +116,12 @@ Do not combine multiple layers' responsibilities in one file, even for a simple 
 - If generated code violates a boundary, correct the rules or implementation and verify again. Record actual deviations rather than inventing failures or retries.
 - The user must personally read both the context rules and generated code. Automated checks cannot replace either review.
 
-## 8. Lab 2 Contract and Verification
+## 8. Contract and Verification
 
 - Maintain `docs/openapi.json` before changing endpoint behavior. Keep request validation, interfaces, Mongoose schemas, and HTTP responses consistent with it.
-- Preserve Route → Controller → Service for the three required resources/reservations endpoints. Store local-test data only in Services; never in a Router or Controller.
+- Preserve Route → Controller → Service → Model for the three required resources/reservations endpoints. Persist data only through Services; never in a Router or Controller.
 - Validate `unknown` inputs before passing typed data to Services. Reject missing/unexpected fields, malformed dates, invalid intervals, and invalid query values with contract errors.
 - Overlap uses half-open intervals for the same resource. Non-cancelled overlapping reservations block creation; adjacent intervals do not.
-- Run `npm test`, contract validation, `npm run check`, and `npm run build`, plus development and compiled HTTP smoke checks before claiming Lab 2 verified.
+- Run `npm test`, contract validation, `npm run check`, and `npm run build`, plus development and compiled HTTP smoke checks before claiming a lab verified. The Lab 2 HTTP suite is the regression suite; behavior changes require a contract change first.
+- HTTP tests and manual checks require a running MongoDB. Tests create, seed, and drop their own `campushub_test_<pid>` database; never point tests at development data. Manual checks require `npm run seed` first.
 - The built-in Node test runner requires no added dependency. Tests in `src/tests/` are included in existing compiler/lint coverage; do not mount them in the application.

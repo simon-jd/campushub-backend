@@ -3,10 +3,10 @@ import { listResources } from '../services/resource.service';
 import type { ErrorResponse, Resource } from '../types/reservation';
 import { isResourceType } from '../validation/reservation.validation';
 
-export function listResourcesController(
+export async function listResourcesController(
   request: Request<Record<string, string>, Resource[] | ErrorResponse, unknown>,
   response: Response<Resource[] | ErrorResponse>,
-): void {
+): Promise<void> {
   const query = request.query;
   const type = query.type === 'STUDY_ROOM' ? 'ROOM' : query.type;
   if (
@@ -19,5 +19,5 @@ export function listResourcesController(
     });
     return;
   }
-  response.status(200).json(listResources(type));
+  response.status(200).json(await listResources(type));
 }

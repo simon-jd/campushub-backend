@@ -5,7 +5,11 @@ import { request as httpRequest } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
-import { app } from '../app';
+import mongoose from 'mongoose';
+import { app, connectDatabase, disconnectDatabase } from '../app';
+import { loadConfig } from '../config/environment';
+import { seedResources } from '../services/resource.service';
+import type { Resource } from '../types/reservation';
 
 interface JsonObject {
   [key: string]: unknown;
@@ -20,6 +24,43 @@ function object(value: unknown): JsonObject {
   assert.ok(typeof value === 'object' && value !== null && !Array.isArray(value));
   return value as JsonObject;
 }
+
+// Lab 2 resource IDs (res-101 to res-104) become fixed ObjectIds under MongoDB persistence.
+const ROOM_ID = '000000000000000000000101';
+const EQUIPMENT_ID = '000000000000000000000102';
+const UNAVAILABLE_ID = '000000000000000000000104';
+const ABSENT_ID = '0000000000000000000009ff';
+
+const fixtures: readonly Resource[] = [
+  {
+    id: ROOM_ID,
+    name: 'Study Room 302',
+    type: 'ROOM',
+    location: 'Library, Floor 3',
+    isAvailable: true,
+  },
+  {
+    id: EQUIPMENT_ID,
+    name: '3D Printer A',
+    type: 'EQUIPMENT',
+    location: 'Makerspace',
+    isAvailable: true,
+  },
+  {
+    id: '000000000000000000000103',
+    name: 'Computer Lab 201',
+    type: 'LAB',
+    location: 'Science Building, Floor 2',
+    isAvailable: true,
+  },
+  {
+    id: UNAVAILABLE_ID,
+    name: 'Study Room 304',
+    type: 'ROOM',
+    location: 'Library, Floor 3',
+    isAvailable: false,
+  },
+];
 
 const contract = object(JSON.parse(readFileSync('docs/openapi.json', 'utf8')) as unknown);
 const schemas = object(object(contract.components).schemas);
@@ -78,6 +119,15 @@ function assertResponse(result: HttpResult, path: string, method: string): void 
 }
 
 test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
+  // A per-process database on the configured server keeps development data untouched.
+  const { database } = loadConfig(process.env);
+  await connectDatabase({ uri: database.uri, dbName: `campushub_test_${process.pid}` });
+  context.after(async (): Promise<void> => {
+    await mongoose.connection.dropDatabase();
+    await disconnectDatabase();
+  });
+  assert.equal((await seedResources(fixtures)).length, fixtures.length);
+
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
@@ -122,7 +172,7 @@ test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
   }
 
   const booking: JsonObject = {
-    resourceId: 'res-101',
+    resourceId: ROOM_ID,
     userId: 'user-456',
     startTime: '2099-10-01T10:00:00Z',
     endTime: '2099-10-01T11:00:00Z',
@@ -146,7 +196,7 @@ test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
     async (): Promise<void> => {
       const all = await request('/resources');
       assert.equal(all.status, 200);
-      assert.ok(Array.isArray(all.body) && all.body.length >= 3);
+      assert.deepEqual(all.body, fixtures);
       for (const type of ['ROOM', 'EQUIPMENT', 'LAB']) {
         const filtered = await request(`/resources?type=${type}`);
         assert.equal(filtered.status, 200);
@@ -184,6 +234,14 @@ test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
       const created = object(result.body);
       assert.equal(created.status, 'CONFIRMED');
       assert.equal(created.startTime, '2099-10-01T10:00:00.000Z');
+      assert.equal(created.resourceId, ROOM_ID);
+      assert.equal(typeof created.id, 'string');
+      // The record lives in MongoDB with the resource reference stored as an ObjectId.
+      const stored = await mongoose.connection
+        .collection('reservations')
+        .findOne({ _id: new mongoose.Types.ObjectId(String(created.id)) });
+      assert.ok(stored !== null && stored.resourceId instanceof mongoose.Types.ObjectId);
+      assert.ok(stored.startTime instanceof Date);
       const mine = await request('/reservations/user/user-456');
       assert.equal(mine.status, 200);
       assert.deepEqual(mine.body, [created]);
@@ -222,7 +280,7 @@ test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
       for (const changes of [
         { startTime: '2099-10-01T09:00:00Z', endTime: '2099-10-01T10:00:00Z' },
         { startTime: '2099-10-01T11:00:00Z', endTime: '2099-10-01T12:00:00Z' },
-        { resourceId: 'res-102' },
+        { resourceId: EQUIPMENT_ID },
       ])
         assert.equal(
           (await request('/reservations', 'POST', { ...booking, ...changes })).status,
@@ -323,12 +381,14 @@ test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
     'missing or unavailable resources fail without creating bookings',
     async (): Promise<void> => {
       const before = (await request('/reservations/user/user-456')).body;
-      const missing = await request('/reservations', 'POST', { ...booking, resourceId: 'missing' });
-      assert.equal(missing.status, 404);
-      assert.equal(object(missing.body).code, 'RESOURCE_NOT_FOUND');
+      for (const resourceId of ['missing', 'res-101', ABSENT_ID]) {
+        const missing = await request('/reservations', 'POST', { ...booking, resourceId });
+        assert.equal(missing.status, 404, resourceId);
+        assert.equal(object(missing.body).code, 'RESOURCE_NOT_FOUND');
+      }
       const unavailable = await request('/reservations', 'POST', {
         ...booking,
-        resourceId: 'res-104',
+        resourceId: UNAVAILABLE_ID,
       });
       assert.equal(unavailable.status, 409);
       assert.equal(object(unavailable.body).code, 'RESOURCE_UNAVAILABLE');

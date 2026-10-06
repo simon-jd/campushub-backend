@@ -3,10 +3,11 @@ import { createReservation, listUserReservations } from '../services/reservation
 import type { ErrorResponse, Reservation } from '../types/reservation';
 import { isIdentifier, parseReservationInput } from '../validation/reservation.validation';
 
-export function createReservationController(
+// Express 5 forwards rejected handler Promises to the shared error middleware (500 INTERNAL_ERROR).
+export async function createReservationController(
   request: Request<Record<string, string>, Reservation | ErrorResponse, unknown>,
   response: Response<Reservation | ErrorResponse>,
-): void {
+): Promise<void> {
   if (!request.is('application/json')) {
     response
       .status(415)
@@ -22,7 +23,7 @@ export function createReservationController(
     });
     return;
   }
-  const result = createReservation(input);
+  const result = await createReservation(input);
   switch (result.kind) {
     case 'not_found':
       response
@@ -45,10 +46,10 @@ export function createReservationController(
   }
 }
 
-export function listUserReservationsController(
+export async function listUserReservationsController(
   request: Request<Record<string, string>, Reservation[] | ErrorResponse, unknown>,
   response: Response<Reservation[] | ErrorResponse>,
-): void {
+): Promise<void> {
   const userId = request.params.userId;
   if (!isIdentifier(userId) || Object.keys(request.query).length > 0) {
     response.status(400).json({
@@ -57,5 +58,5 @@ export function listUserReservationsController(
     });
     return;
   }
-  response.status(200).json(listUserReservations(userId));
+  response.status(200).json(await listUserReservations(userId));
 }

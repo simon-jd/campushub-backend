@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "CampusHub Reservation API",
-    "version": "1.0.0",
-    "description": "CS 5500 Lab 2: local in-memory resource reservations. Responses are direct objects/arrays and errors are {code, message}. Data resets on process restart; there is no authentication, MongoDB connection, or cross-process persistence. Unmatched routes return 404 ErrorResponse. Calendar validity and interval ordering are checked at runtime in addition to schema formats.",
+    "version": "1.1.0",
+    "description": "CS 5500 Lab 3: resource reservations persisted in MongoDB through Mongoose. Responses are direct objects/arrays and errors are {code, message}. Resource and reservation ids are MongoDB ObjectIds. There is no authentication. Unmatched routes return 404 ErrorResponse. Calendar validity and interval ordering are checked at runtime in addition to schema formats.",
     "license": {
       "name": "UNLICENSED"
     }
@@ -62,7 +62,7 @@
         "operationId": "listResources",
         "tags": ["Resources"],
         "summary": "List resources, optionally filtered by type",
-        "description": "Returns the local resource catalog. STUDY_ROOM is a query-only alias for ROOM to support the assignment curl example. Unknown query parameters and repeated type values are rejected.",
+        "description": "Returns the resource catalog stored in MongoDB, ordered by id. STUDY_ROOM is a query-only alias for ROOM to support the assignment curl example. Unknown query parameters and repeated type values are rejected.",
         "parameters": [
           {
             "name": "type",
@@ -88,7 +88,7 @@
                 },
                 "example": [
                   {
-                    "id": "res-101",
+                    "id": "000000000000000000000101",
                     "name": "Study Room 302",
                     "type": "ROOM",
                     "location": "Library, Floor 3",
@@ -112,7 +112,7 @@
         "operationId": "createReservation",
         "tags": ["Reservations"],
         "summary": "Create a time-slotted reservation",
-        "description": "Creates a CONFIRMED reservation in memory. Any non-cancelled reservation for the same resource with an overlapping time interval causes 409. A syntactically valid userId is accepted without a user database. Unknown query parameters are rejected. Only uncompressed JSON request bodies are supported; compressed Content-Encoding values return 415.",
+        "description": "Persists a CONFIRMED reservation in MongoDB. Any non-cancelled reservation for the same resource with an overlapping time interval causes 409; bookings for one resource are serialized within a single server process. A resourceId that is not an existing resource's ObjectId returns 404. A syntactically valid userId is accepted without a user database. Unknown query parameters are rejected. Only uncompressed JSON request bodies are supported; compressed Content-Encoding values return 415.",
         "requestBody": {
           "required": true,
           "content": {
@@ -121,7 +121,7 @@
                 "$ref": "#/components/schemas/CreateReservationRequest"
               },
               "example": {
-                "resourceId": "res-101",
+                "resourceId": "000000000000000000000101",
                 "userId": "user-456",
                 "startTime": "2026-10-01T10:00:00Z",
                 "endTime": "2026-10-01T11:00:00Z"
@@ -138,11 +138,11 @@
                   "$ref": "#/components/schemas/Reservation"
                 },
                 "example": {
-                  "id": "eecdbed0-907b-4737-860b-a6b22f6f85e0",
-                  "resourceId": "res-101",
+                  "id": "6720f3c2a1b4c5d6e7f80912",
+                  "resourceId": "000000000000000000000101",
                   "userId": "user-456",
-                  "startTime": "2026-10-01T10:00:00Z",
-                  "endTime": "2026-10-01T11:00:00Z",
+                  "startTime": "2026-10-01T10:00:00.000Z",
+                  "endTime": "2026-10-01T11:00:00.000Z",
                   "status": "CONFIRMED"
                 }
               }
@@ -188,7 +188,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Active reservations for this user, in creation order.",
+            "description": "Active reservations for this user, in creation (ObjectId) order.",
             "content": {
               "application/json": {
                 "schema": {
@@ -199,11 +199,11 @@
                 },
                 "example": [
                   {
-                    "id": "eecdbed0-907b-4737-860b-a6b22f6f85e0",
-                    "resourceId": "res-101",
+                    "id": "6720f3c2a1b4c5d6e7f80912",
+                    "resourceId": "000000000000000000000101",
                     "userId": "user-456",
-                    "startTime": "2026-10-01T10:00:00Z",
-                    "endTime": "2026-10-01T11:00:00Z",
+                    "startTime": "2026-10-01T10:00:00.000Z",
+                    "endTime": "2026-10-01T11:00:00.000Z",
                     "status": "CONFIRMED"
                   }
                 ]
@@ -228,11 +228,17 @@
         "maxLength": 64,
         "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
       },
+      "ObjectId": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{24}$",
+        "description": "MongoDB ObjectId as 24 lowercase hexadecimal characters.",
+        "example": "000000000000000000000101"
+      },
       "Timestamp": {
         "type": "string",
         "format": "date-time",
         "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(\\.\\d{1,3})?(Z|[+-]([01]\\d|2[0-3]):[0-5]\\d)$",
-        "description": "Calendar-valid ISO 8601 / RFC 3339 timestamp with uppercase T, seconds, Z or numeric offset, and optional 1\u20133 fractional digits. Years 0001\u20139999; no leap seconds. Responses normalize to UTC milliseconds.",
+        "description": "Calendar-valid ISO 8601 / RFC 3339 timestamp with uppercase T, seconds, Z or numeric offset, and optional 1–3 fractional digits. Years 0001–9999; no leap seconds. Responses normalize to UTC milliseconds.",
         "example": "2026-10-01T10:00:00Z"
       },
       "User": {
@@ -250,7 +256,7 @@
             "pattern": "\\S"
           }
         },
-        "description": "Minimal user data model for future persistence; no user management or authentication endpoint is implemented in Lab 2."
+        "description": "Minimal user data model for future persistence; no user management or authentication endpoint is implemented."
       },
       "Resource": {
         "type": "object",
@@ -258,7 +264,7 @@
         "required": ["id", "name", "type", "location", "isAvailable"],
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Identifier"
+            "$ref": "#/components/schemas/ObjectId"
           },
           "name": {
             "type": "string",
@@ -300,7 +306,7 @@
             "$ref": "#/components/schemas/Timestamp"
           }
         },
-        "description": "Client-supplied fields only. startTime must be earlier than endTime. The server assigns id and status. Past intervals are allowed for this local lab; they are excluded from active results once ended."
+        "description": "Client-supplied fields only. resourceId should be a Resource ObjectId; other syntactically valid identifiers match no resource and return 404. startTime must be earlier than endTime. The server assigns id and status. Past intervals are allowed; they are excluded from active results once ended."
       },
       "Reservation": {
         "type": "object",
@@ -308,11 +314,10 @@
         "required": ["id", "resourceId", "userId", "startTime", "endTime", "status"],
         "properties": {
           "id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/ObjectId"
           },
           "resourceId": {
-            "$ref": "#/components/schemas/Identifier"
+            "$ref": "#/components/schemas/ObjectId"
           },
           "userId": {
             "$ref": "#/components/schemas/Identifier"

@@ -62,6 +62,42 @@ export default defineConfig(
     },
   },
   {
+    files: ['src/models/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['express', 'mongodb'],
+          patterns: ['**/services/**', '**/controllers/**', '**/routes/**'],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/config/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['express', 'mongoose', 'mongodb'],
+          patterns: ['**/services/**', '**/controllers/**', '**/routes/**', '**/models/**'],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/scripts/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['express', 'mongoose', 'mongodb'],
+          patterns: ['**/controllers/**', '**/routes/**', '**/models/**'],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.{js,cjs,mjs,jsx}'],
     rules: {
       'no-restricted-syntax': [
