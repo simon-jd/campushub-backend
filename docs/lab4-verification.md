@@ -153,12 +153,20 @@ error-middleware suite, which asserts that sync and async handler failures both 
 
 ## Diagnostics and Corrections
 
-Three agent failures occurred during Part 2 and are documented in full, with the exact remediation
-prompts, in [lab4-steering-log.md](lab4-steering-log.md): a hallucinated `FilterQuery` import that
-does not exist in Mongoose 9; a seed helper copied from `seedResources` into a schema whose
-cross-field validator cannot run under update validators; and a generated comment that contradicted
-the assertion directly beneath it. All three were caught by mechanical gates — `tsc`, a deliberate
+Three agent failures occurred during Part 2 and are documented in
+[lab4-steering-log.md](lab4-steering-log.md): a hallucinated `FilterQuery` import that does not
+exist in Mongoose 9; a seed helper copied from `seedResources` into a schema whose cross-field
+validator cannot run under update validators; and a generated comment that contradicted the
+assertion directly beneath it. All three were caught by mechanical gates — `tsc`, a deliberate
 throwaway probe, and the test runner — rather than by rereading the generated code.
+
+**No student-authored prompt was issued mid-loop for any of the three.** The agent self-corrected
+under standing rules already committed in `AGENTS.md` §7, which forbid the `any` / `@ts-ignore` /
+`eslint-disable` repairs an agent reaches for when an error proves stubborn. The steering log states
+this explicitly, separates what actually intervened from the reactive prompts that were written
+during the retrospective and never sent, and labels the latter as unused. Incident 1 was re-staged
+afterward — the hallucinated import reintroduced and `npm run typecheck` re-run — to confirm its
+error text is reproducible rather than recalled.
 
 ## Limitations
 
