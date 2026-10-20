@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { test } from 'node:test';
@@ -10,20 +9,8 @@ import { app, connectDatabase, disconnectDatabase } from '../app';
 import { loadConfig } from '../config/environment';
 import { seedResources } from '../services/resource.service';
 import type { Resource } from '../types/reservation';
-
-interface JsonObject {
-  [key: string]: unknown;
-}
-
-interface HttpResult {
-  status: number;
-  body: unknown;
-}
-
-function object(value: unknown): JsonObject {
-  assert.ok(typeof value === 'object' && value !== null && !Array.isArray(value));
-  return value as JsonObject;
-}
+import { assertResponse, matchesSchema, object, schema } from './contract.helper';
+import type { HttpResult, JsonObject } from './contract.helper';
 
 // Lab 2 resource IDs (res-101 to res-104) become fixed ObjectIds under MongoDB persistence.
 const ROOM_ID = '000000000000000000000101';
@@ -61,62 +48,6 @@ const fixtures: readonly Resource[] = [
     isAvailable: false,
   },
 ];
-
-const contract = object(JSON.parse(readFileSync('docs/openapi.json', 'utf8')) as unknown);
-const schemas = object(object(contract.components).schemas);
-
-// This checks the schema features used by our responses, not arbitrary OpenAPI documents.
-// Redocly separately validates the complete OpenAPI specification.
-function matchesSchema(value: unknown, rawSchema: unknown): void {
-  const schema = object(rawSchema);
-  if (typeof schema.$ref === 'string') {
-    const name = schema.$ref.split('/').at(-1);
-    assert.ok(name);
-    matchesSchema(value, schemas[name]);
-    return;
-  }
-  if (Array.isArray(schema.enum)) assert.ok(schema.enum.includes(value));
-  if (schema.type === 'array') {
-    assert.ok(Array.isArray(value));
-    for (const item of value) matchesSchema(item, schema.items);
-  } else if (schema.type === 'object') {
-    const record = object(value);
-    const properties = object(schema.properties);
-    assert.ok(Array.isArray(schema.required));
-    for (const key of schema.required) {
-      assert.equal(typeof key, 'string');
-      assert.ok(Object.hasOwn(record, String(key)), `Missing ${String(key)}`);
-    }
-    for (const [key, field] of Object.entries(record)) {
-      if (schema.additionalProperties === false) assert.ok(Object.hasOwn(properties, key));
-      matchesSchema(field, properties[key]);
-    }
-  } else if (schema.type === 'string') {
-    assert.equal(typeof value, 'string');
-    assert.ok(typeof value === 'string');
-    if (typeof schema.minLength === 'number') assert.ok(value.length >= schema.minLength);
-    if (typeof schema.maxLength === 'number') assert.ok(value.length <= schema.maxLength);
-    if (typeof schema.pattern === 'string') assert.match(value, new RegExp(schema.pattern));
-    if (schema.format === 'date-time') assert.ok(Number.isFinite(Date.parse(value)));
-    if (schema.format === 'uuid') {
-      assert.match(value, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-    }
-  } else {
-    assert.equal(schema.type, 'boolean');
-    assert.equal(typeof value, 'boolean');
-  }
-}
-
-function assertResponse(result: HttpResult, path: string, method: string): void {
-  const operation = object(object(object(contract.paths)[path])[method]);
-  let response = object(object(operation.responses)[String(result.status)]);
-  if (typeof response.$ref === 'string') {
-    const name = response.$ref.split('/').at(-1);
-    assert.ok(name);
-    response = object(object(object(contract.components).responses)[name]);
-  }
-  matchesSchema(result.body, object(object(response.content)['application/json']).schema);
-}
 
 test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
   // A per-process database on the configured server keeps development data untouched.
@@ -186,7 +117,7 @@ test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
       assert.equal(object(health.body).status, 'ok');
       const missing = await request('/missing');
       assert.equal(missing.status, 404);
-      matchesSchema(missing.body, schemas.ErrorResponse);
+      matchesSchema(missing.body, schema('ErrorResponse'));
       assert.equal(object(missing.body).code, 'NOT_FOUND');
     },
   );
@@ -397,7 +328,7 @@ test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
   );
 
   await context.test(
-    'expired reservations are excluded and invalid user paths fail',
+    'elapsed reservations stay listed and invalid user paths fail',
     async (): Promise<void> => {
       const past = {
         ...booking,
@@ -405,8 +336,11 @@ test('Lab 2 HTTP contract', async (context: TestContext): Promise<void> => {
         startTime: '2000-01-01T10:00:00Z',
         endTime: '2000-01-01T11:00:00Z',
       };
-      assert.equal((await request('/reservations', 'POST', past)).status, 201);
-      assert.deepEqual((await request('/reservations/user/past-user')).body, []);
+      const created = await request('/reservations', 'POST', past);
+      assert.equal(created.status, 201);
+      // Contract 1.2.0 widened this listing to every reservation the user owns. Version 1.1.0
+      // hid reservations whose endTime had passed; Lab 4 keeps them so a history stays readable.
+      assert.deepEqual((await request('/reservations/user/past-user')).body, [created.body]);
       for (const path of [
         '/reservations/user/%20',
         '/reservations/user/a%2Fb',

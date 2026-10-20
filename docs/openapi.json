@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "CampusHub Reservation API",
-    "version": "1.1.0",
-    "description": "CS 5500 Lab 3: resource reservations persisted in MongoDB through Mongoose. Responses are direct objects/arrays and errors are {code, message}. Resource and reservation ids are MongoDB ObjectIds. There is no authentication. Unmatched routes return 404 ErrorResponse. Calendar validity and interval ordering are checked at runtime in addition to schema formats.",
+    "version": "1.2.0",
+    "description": "CS 5500 Lab 4: resource reservations persisted in MongoDB through Mongoose, with catalog availability filtering and reservation status transitions. Responses are direct objects/arrays and errors are {code, message}. Resource and reservation ids are MongoDB ObjectIds. There is no authentication. Unmatched routes return 404 ErrorResponse. Calendar validity and interval ordering are checked at runtime in addition to schema formats.",
     "license": {
       "name": "UNLICENSED"
     }
@@ -61,8 +61,8 @@
       "get": {
         "operationId": "listResources",
         "tags": ["Resources"],
-        "summary": "List resources, optionally filtered by type",
-        "description": "Returns the resource catalog stored in MongoDB, ordered by id. STUDY_ROOM is a query-only alias for ROOM to support the assignment curl example. Unknown query parameters and repeated type values are rejected.",
+        "summary": "List resources, optionally filtered by type and availability",
+        "description": "Returns the resource catalog stored in MongoDB, ordered by id. STUDY_ROOM is a query-only alias for ROOM to support the assignment curl example. type and isAvailable may be combined and are then applied together. Unknown query parameters and repeated values are rejected.",
         "parameters": [
           {
             "name": "type",
@@ -72,6 +72,16 @@
             "schema": {
               "type": "string",
               "enum": ["ROOM", "EQUIPMENT", "LAB", "STUDY_ROOM"]
+            }
+          },
+          {
+            "name": "isAvailable",
+            "in": "query",
+            "required": false,
+            "description": "Exactly one of the literal strings true or false; other spellings are rejected.",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
             }
           }
         ],
@@ -173,8 +183,8 @@
       "get": {
         "operationId": "listUserReservations",
         "tags": ["Reservations"],
-        "summary": "List active reservations for one user",
-        "description": "Active means PENDING or CONFIRMED with endTime later than the current time. Only the requested user is included. Returns [] when none exist. Unknown query parameters are rejected.",
+        "summary": "List every reservation for one user",
+        "description": "Returns all reservations belonging to the requested user, in creation (ObjectId) order, including CANCELLED reservations and reservations whose endTime has already passed, so a cancellation stays observable. The optional status parameter narrows the list to one status. Returns [] when none exist. Unknown query parameters are rejected. Changed in 1.2.0: version 1.1.0 returned only non-cancelled reservations ending in the future.",
         "parameters": [
           {
             "name": "userId",
@@ -184,11 +194,21 @@
             "schema": {
               "$ref": "#/components/schemas/Identifier"
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Exactly one reservation status; omit to return every reservation.",
+            "schema": {
+              "type": "string",
+              "enum": ["PENDING", "CONFIRMED", "CANCELLED"]
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Active reservations for this user, in creation (ObjectId) order.",
+            "description": "Every reservation for this user, in creation (ObjectId) order.",
             "content": {
               "application/json": {
                 "schema": {
@@ -218,6 +238,108 @@
           }
         }
       }
+    },
+    "/reservations/{id}/cancel": {
+      "patch": {
+        "operationId": "cancelReservation",
+        "tags": ["Reservations"],
+        "summary": "Cancel a reservation",
+        "description": "Transitions a PENDING or CONFIRMED reservation to CANCELLED and returns it. The released interval stops blocking overlap checks immediately, so the slot becomes bookable again. Cancelling an already CANCELLED reservation is a 409 INVALID_STATE_TRANSITION rather than a silent no-op. An id that is not an existing reservation's ObjectId returns 404. The request takes no body; unknown query parameters are rejected.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The reservation's ObjectId.",
+            "schema": {
+              "$ref": "#/components/schemas/ObjectId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The reservation after the transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reservation"
+                },
+                "example": {
+                  "id": "6720f3c2a1b4c5d6e7f80912",
+                  "resourceId": "000000000000000000000101",
+                  "userId": "user-456",
+                  "startTime": "2026-10-01T10:00:00.000Z",
+                  "endTime": "2026-10-01T11:00:00.000Z",
+                  "status": "CANCELLED"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/ReservationNotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/StateConflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/reservations/{id}/confirm": {
+      "patch": {
+        "operationId": "confirmReservation",
+        "tags": ["Reservations"],
+        "summary": "Confirm a pending reservation",
+        "description": "Transitions a PENDING reservation to CONFIRMED and returns it. CONFIRMED and CANCELLED are both rejected with 409 INVALID_STATE_TRANSITION: CANCELLED is terminal, and a reservation cannot be confirmed twice. An id that is not an existing reservation's ObjectId returns 404. The request takes no body; unknown query parameters are rejected.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The reservation's ObjectId.",
+            "schema": {
+              "$ref": "#/components/schemas/ObjectId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The reservation after the transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reservation"
+                },
+                "example": {
+                  "id": "6720f3c2a1b4c5d6e7f80912",
+                  "resourceId": "000000000000000000000101",
+                  "userId": "user-456",
+                  "startTime": "2026-10-01T10:00:00.000Z",
+                  "endTime": "2026-10-01T11:00:00.000Z",
+                  "status": "CONFIRMED"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/ReservationNotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/StateConflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -238,7 +360,7 @@
         "type": "string",
         "format": "date-time",
         "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(\\.\\d{1,3})?(Z|[+-]([01]\\d|2[0-3]):[0-5]\\d)$",
-        "description": "Calendar-valid ISO 8601 / RFC 3339 timestamp with uppercase T, seconds, Z or numeric offset, and optional 1–3 fractional digits. Years 0001–9999; no leap seconds. Responses normalize to UTC milliseconds.",
+        "description": "Calendar-valid ISO 8601 / RFC 3339 timestamp with uppercase T, seconds, Z or numeric offset, and optional 1\u20133 fractional digits. Years 0001\u20139999; no leap seconds. Responses normalize to UTC milliseconds.",
         "example": "2026-10-01T10:00:00Z"
       },
       "User": {
@@ -346,6 +468,8 @@
               "RESOURCE_NOT_FOUND",
               "RESOURCE_UNAVAILABLE",
               "DOUBLE_BOOKING",
+              "RESERVATION_NOT_FOUND",
+              "INVALID_STATE_TRANSITION",
               "NOT_FOUND",
               "PAYLOAD_TOO_LARGE",
               "UNSUPPORTED_MEDIA_TYPE",
@@ -464,6 +588,34 @@
             "example": {
               "code": "INTERNAL_ERROR",
               "message": "An unexpected error occurred."
+            }
+          }
+        }
+      },
+      "ReservationNotFound": {
+        "description": "No reservation exists with this id.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "RESERVATION_NOT_FOUND",
+              "message": "The reservation was not found."
+            }
+          }
+        }
+      },
+      "StateConflict": {
+        "description": "The reservation's current status does not allow the requested transition.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "INVALID_STATE_TRANSITION",
+              "message": "A CANCELLED reservation cannot be cancelled."
             }
           }
         }

@@ -28,12 +28,14 @@ Stop the development watcher with Ctrl+C, which closes the HTTP server and the d
 [docs/openapi.json](docs/openapi.json) is the authoritative OpenAPI 3.0.3 contract.
 Successes return objects or arrays directly, and all errors return `{ "code": "...", "message": "..." }`.
 
-| Method | Path                                 | Success                        | Relevant errors                          |
-| ------ | ------------------------------------ | ------------------------------ | ---------------------------------------- |
-| GET    | `/api/v1/health`                     | `200` status and timestamp     | `500`                                    |
-| GET    | `/api/v1/resources`                  | `200` resource array           | `400`, `500`                             |
-| POST   | `/api/v1/reservations`               | `201` reservation              | `400`, `404`, `409`, `413`, `415`, `500` |
-| GET    | `/api/v1/reservations/user/{userId}` | `200` active reservation array | `400`, `500`                             |
+| Method | Path                                 | Success                    | Relevant errors                          |
+| ------ | ------------------------------------ | -------------------------- | ---------------------------------------- |
+| GET    | `/api/v1/health`                     | `200` status and timestamp | `500`                                    |
+| GET    | `/api/v1/resources`                  | `200` resource array       | `400`, `500`                             |
+| POST   | `/api/v1/reservations`               | `201` reservation          | `400`, `404`, `409`, `413`, `415`, `500` |
+| GET    | `/api/v1/reservations/user/{userId}` | `200` reservation array    | `400`, `500`                             |
+| PATCH  | `/api/v1/reservations/{id}/cancel`   | `200` reservation          | `400`, `404`, `409`, `500`               |
+| PATCH  | `/api/v1/reservations/{id}/confirm`  | `200` reservation          | `400`, `404`, `409`, `500`               |
 
 Unknown routes return `404 NOT_FOUND`. Application errors never expose internal stacks to clients.
 Health does not probe MongoDB.
@@ -45,10 +47,13 @@ curl -i 'http://127.0.0.1:3000/api/v1/resources'
 curl -i 'http://127.0.0.1:3000/api/v1/resources?type=ROOM'
 curl -i 'http://127.0.0.1:3000/api/v1/resources?type=STUDY_ROOM'
 curl -i 'http://127.0.0.1:3000/api/v1/resources?type='
+curl -i 'http://127.0.0.1:3000/api/v1/resources?isAvailable=true'
+curl -i 'http://127.0.0.1:3000/api/v1/resources?type=ROOM&isAvailable=false'
 ```
 
 Domain types are `ROOM`, `EQUIPMENT`, and `LAB`.
 `STUDY_ROOM` is a query-only alias for `ROOM`, supporting the assignment's example while preserving its domain enum.
+`isAvailable` accepts exactly the literal strings `true` or `false`; `type` and `isAvailable` may be combined and are then applied together.
 Empty, repeated, unsupported, or unknown query parameters return `400 VALIDATION_ERROR`.
 
 `npm run seed` upserts this catalog. IDs are MongoDB ObjectIds; fixed values mirror Lab 2's `res-101`…`res-104`
@@ -89,16 +94,39 @@ Repeating it returns `409`:
 curl -i 'http://127.0.0.1:3000/api/v1/reservations/user/user-456'
 ```
 
+### Status transitions
+
+```sh
+curl -i -X PATCH 'http://127.0.0.1:3000/api/v1/reservations/<id>/cancel'
+curl -i -X PATCH 'http://127.0.0.1:3000/api/v1/reservations/000000000000000000000201/confirm'
+```
+
+Both routes take no request body and return `200` with the updated reservation.
+
+- `CANCELLED` is terminal and a status is never a legal source for a transition to itself, so
+  cancelling an already-cancelled reservation, or confirming a confirmed or cancelled one, returns
+  `409 INVALID_STATE_TRANSITION` rather than silently succeeding.
+- Cancelling releases the interval immediately: the same window becomes bookable again on the very
+  next request.
+- An `id` that is not an existing reservation's ObjectId returns `404 RESERVATION_NOT_FOUND`,
+  matching how creation treats an unknown `resourceId`.
+- Each transition is one conditional update, so concurrent cancellations of the same reservation
+  produce exactly one `200` and the rest `409`.
+- `POST /reservations` creates `CONFIRMED` reservations, so `npm run seed` also upserts one
+  `PENDING` reservation (`000000000000000000000201`, Computer Lab 201) to exercise `confirm`.
+  Reseeding returns it to `PENDING` so the transition can be retried.
+
 Reservations persist across server restarts. To repeat the manual tests from a clean state,
 drop the reservations collection (for example `mongosh campushub --eval 'db.reservations.drop()'`) and run `npm run seed` again.
 
-- Active reservations are `PENDING` or `CONFIRMED` with `endTime` later than the current time.
-  Another user or a user without active reservations receives `[]`.
+- The user listing returns every reservation that user owns, including `CANCELLED` ones and ones
+  whose `endTime` has passed, so a cancellation stays visible. Add `?status=PENDING|CONFIRMED|CANCELLED`
+  to narrow it. A user without reservations receives `[]`.
 - IDs use 1–64 ASCII letters, digits, underscores, or hyphens, starting with a letter or digit.
   A `resourceId` that is not an existing resource's ObjectId (including Lab 2's `res-101`) returns `404 RESOURCE_NOT_FOUND`.
 - Creation accepts exactly `resourceId`, `userId`, `startTime`, and `endTime`; clients cannot assign `id` or `status`.
 - Timestamps require a real calendar date, uppercase `T`, seconds, and `Z` or a numeric offset. Optional fractions have 1–3 digits. Supported years are 0001–9999, including after UTC normalization; leap seconds are not accepted.
-- `startTime` must precede `endTime`. Past reservations may be created but are excluded from active results after they end.
+- `startTime` must precede `endTime`. Past reservations may be created and stay listed after they end.
 - Intervals are half-open: `[startTime, endTime)`. Adjacent bookings are allowed. Overlap on another resource is allowed.
 - An operationally unavailable resource returns `409 RESOURCE_UNAVAILABLE`.
 - Reservation creation requires uncompressed JSON. The parser enforces a 16 KiB limit; malformed JSON returns `400`, oversized input `413`, and unsupported media, charset, or compressed encoding `415`. JSON parsing applies only to reservation creation.

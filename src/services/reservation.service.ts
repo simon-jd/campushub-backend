@@ -1,9 +1,26 @@
-import { Types } from 'mongoose';
-import type { ReservationResult } from '../interfaces/reservation-result.interface';
+import { isObjectIdOrHexString, Types } from 'mongoose';
+import type { QueryFilter } from 'mongoose';
+import type {
+  ReservationResult,
+  ReservationTransitionResult,
+} from '../interfaces/reservation-result.interface';
 import { ReservationModel } from '../models/Reservation.model';
-import type { ReservationDocument } from '../models/Reservation.model';
-import type { CreateReservationRequest, Reservation } from '../types/reservation';
+import type { ReservationDocument, ReservationRecord } from '../models/Reservation.model';
+import type {
+  CreateReservationRequest,
+  Reservation,
+  ReservationStatus,
+  ReservationTransition,
+} from '../types/reservation';
 import { getResource } from './resource.service';
+
+// Which current statuses permit each transition. CANCELLED appears in no list, so it is
+// terminal, and a status is never a legal source for itself: re-confirming or re-cancelling
+// is reported as a conflict instead of silently succeeding.
+const ALLOWED_SOURCES: Record<ReservationTransition, readonly ReservationStatus[]> = {
+  CONFIRMED: ['PENDING'],
+  CANCELLED: ['PENDING', 'CONFIRMED'],
+};
 
 // The overlap check and insert are separate database round trips. Standalone MongoDB offers no
 // multi-document transaction, so bookings for one resource run one at a time in this process.
@@ -55,15 +72,61 @@ export function createReservation(input: CreateReservationRequest): Promise<Rese
   });
 }
 
-export async function listUserReservations(userId: string): Promise<Reservation[]> {
-  const documents = await ReservationModel.find({
-    userId,
-    status: { $ne: 'CANCELLED' },
-    endTime: { $gt: new Date() },
-  })
-    .sort({ _id: 1 })
-    .exec();
+// Every reservation the user owns, including CANCELLED and past ones, so a cancellation stays
+// visible to the student who made it. Callers narrow the list with an explicit status.
+export async function listUserReservations(
+  userId: string,
+  status?: ReservationStatus,
+): Promise<Reservation[]> {
+  const query: QueryFilter<ReservationRecord> = { userId };
+  if (status !== undefined) query.status = status;
+  const documents = await ReservationModel.find(query).sort({ _id: 1 }).exec();
   return documents.map(toReservation);
+}
+
+// One conditional update performs the whole transition, so two concurrent cancellations cannot
+// both observe the same source status and both report success. A cancellation needs no booking
+// lock: it only removes an interval from the overlap query, so a create racing it either still
+// sees the old reservation and declines, or no longer sees it and succeeds. Neither double-books.
+export async function updateReservationStatus(
+  id: string,
+  target: ReservationTransition,
+): Promise<ReservationTransitionResult> {
+  if (!isObjectIdOrHexString(id)) return { kind: 'not_found' };
+  const document = await ReservationModel.findOneAndUpdate(
+    { _id: id, status: { $in: ALLOWED_SOURCES[target] } },
+    { status: target },
+    { returnDocument: 'after' },
+  ).exec();
+  if (document !== null) return { kind: 'updated', reservation: toReservation(document) };
+  // The update matched nothing. Re-read to separate a missing reservation from a status that
+  // forbids this transition, because the two map to different HTTP responses.
+  const existing = await ReservationModel.exists({ _id: id }).exec();
+  return { kind: existing === null ? 'not_found' : 'invalid_state' };
+}
+
+// Upserting by id keeps sample bookings stable across reseeds, mirroring seedResources.
+// Saving documents rather than issuing an update keeps the schema's startTime/endTime check
+// active; Mongoose update validators cannot see sibling paths they are not writing.
+export async function seedReservations(
+  reservations: readonly Reservation[],
+): Promise<Reservation[]> {
+  const seeded: Reservation[] = [];
+  for (const reservation of reservations) {
+    const document =
+      (await ReservationModel.findById(reservation.id).exec()) ??
+      new ReservationModel({ _id: reservation.id });
+    document.set({
+      resourceId: new Types.ObjectId(reservation.resourceId),
+      userId: reservation.userId,
+      startTime: new Date(reservation.startTime),
+      endTime: new Date(reservation.endTime),
+      status: reservation.status,
+    });
+    await document.save();
+    seeded.push(toReservation(document));
+  }
+  return seeded;
 }
 
 function toReservation(document: ReservationDocument): Reservation {

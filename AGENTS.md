@@ -119,9 +119,11 @@ Do not combine multiple layers' responsibilities in one file, even for a simple 
 ## 8. Contract and Verification
 
 - Maintain `docs/openapi.json` before changing endpoint behavior. Keep request validation, interfaces, Mongoose schemas, and HTTP responses consistent with it.
-- Preserve Route → Controller → Service → Model for the three required resources/reservations endpoints. Persist data only through Services; never in a Router or Controller.
+- Preserve Route → Controller → Service → Model for every resources/reservations endpoint (Lab 2's three, plus the Lab 4 status transitions). Persist data only through Services; never in a Router or Controller.
 - Validate `unknown` inputs before passing typed data to Services. Reject missing/unexpected fields, malformed dates, invalid intervals, and invalid query values with contract errors.
-- Overlap uses half-open intervals for the same resource. Non-cancelled overlapping reservations block creation; adjacent intervals do not.
-- Run `npm test`, contract validation, `npm run check`, and `npm run build`, plus development and compiled HTTP smoke checks before claiming a lab verified. The Lab 2 HTTP suite is the regression suite; behavior changes require a contract change first.
-- HTTP tests and manual checks require a running MongoDB. Tests create, seed, and drop their own `campushub_test_<pid>` database; never point tests at development data. Manual checks require `npm run seed` first.
+- Overlap uses half-open intervals for the same resource. Non-cancelled overlapping reservations block creation; adjacent intervals do not. Cancelling releases an interval immediately, so the slot becomes bookable again.
+- Reservation status transitions are a state machine, not a free-form field update: `CANCELLED` is terminal, and a status is never a legal source for a transition to itself. Perform a transition as one conditional update so concurrent requests cannot both succeed, and report a status that forbids the transition as `409 INVALID_STATE_TRANSITION`, distinct from the `404` used for a missing reservation.
+- Run `npm test`, contract validation, `npm run check`, and `npm run build`, plus development and compiled HTTP smoke checks before claiming a lab verified. The Lab 2 and Lab 4 HTTP suites are the regression suite; behavior changes require a contract change first.
+- Both HTTP suites assert live responses against `docs/openapi.json` through `src/tests/contract.helper.ts`, which fails when an endpoint returns a status the contract never declared. Keep new endpoints wired into that check rather than asserting shapes by hand.
+- HTTP tests and manual checks require a running MongoDB. Tests create, seed, and drop their own per-suite, per-process database (`campushub_test_<pid>`, `campushub_lab4_<pid>`); never point tests at development data. Manual checks require `npm run seed` first.
 - The built-in Node test runner requires no added dependency. Tests in `src/tests/` are included in existing compiler/lint coverage; do not mount them in the application.

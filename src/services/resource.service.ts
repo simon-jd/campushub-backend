@@ -1,12 +1,16 @@
 import { isObjectIdOrHexString } from 'mongoose';
+import type { QueryFilter } from 'mongoose';
+import type { ResourceFilter } from '../interfaces/resource-filter.interface';
 import { ResourceModel } from '../models/Resource.model';
-import type { ResourceDocument } from '../models/Resource.model';
-import type { Resource, ResourceType } from '../types/reservation';
+import type { ResourceDocument, ResourceRecord } from '../models/Resource.model';
+import type { Resource } from '../types/reservation';
 
-export async function listResources(type?: ResourceType): Promise<Resource[]> {
-  const documents = await ResourceModel.find(type === undefined ? {} : { type })
-    .sort({ _id: 1 })
-    .exec();
+export async function listResources(filter: ResourceFilter): Promise<Resource[]> {
+  // Each filter is added only when supplied, so `isAvailable: false` still narrows the query.
+  const query: QueryFilter<ResourceRecord> = {};
+  if (filter.type !== undefined) query.type = filter.type;
+  if (filter.isAvailable !== undefined) query.isAvailable = filter.isAvailable;
+  const documents = await ResourceModel.find(query).sort({ _id: 1 }).exec();
   return documents.map(toResource);
 }
 

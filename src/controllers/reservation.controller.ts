@@ -1,7 +1,22 @@
 import type { Request, Response } from 'express';
-import { createReservation, listUserReservations } from '../services/reservation.service';
-import type { ErrorResponse, Reservation } from '../types/reservation';
-import { isIdentifier, parseReservationInput } from '../validation/reservation.validation';
+import {
+  createReservation,
+  listUserReservations,
+  updateReservationStatus,
+} from '../services/reservation.service';
+import type { ReservationIdParams } from '../interfaces/request-params.interface';
+import type { ErrorResponse, Reservation, ReservationTransition } from '../types/reservation';
+import {
+  isIdentifier,
+  isReservationStatus,
+  parseReservationInput,
+} from '../validation/reservation.validation';
+
+// Why each transition can be refused, phrased for the client that asked for it.
+const TRANSITION_CONFLICTS: Record<ReservationTransition, string> = {
+  CONFIRMED: 'Only a PENDING reservation can be confirmed.',
+  CANCELLED: 'Only a PENDING or CONFIRMED reservation can be cancelled.',
+};
 
 // Express 5 forwards rejected handler Promises to the shared error middleware (500 INTERNAL_ERROR).
 export async function createReservationController(
@@ -51,12 +66,63 @@ export async function listUserReservationsController(
   response: Response<Reservation[] | ErrorResponse>,
 ): Promise<void> {
   const userId = request.params.userId;
-  if (!isIdentifier(userId) || Object.keys(request.query).length > 0) {
+  const status = request.query.status;
+  if (
+    !isIdentifier(userId) ||
+    Object.keys(request.query).some((key: string): boolean => key !== 'status') ||
+    (status !== undefined && !isReservationStatus(status))
+  ) {
     response.status(400).json({
       code: 'VALIDATION_ERROR',
-      message: 'A valid userId is required; query parameters are not supported.',
+      message:
+        'A valid userId is required; status, when present, must be exactly one of PENDING, CONFIRMED or CANCELLED.',
     });
     return;
   }
-  response.status(200).json(await listUserReservations(userId));
+  response.status(200).json(await listUserReservations(userId, status));
+}
+
+export async function cancelReservationController(
+  request: Request<ReservationIdParams, Reservation | ErrorResponse, unknown>,
+  response: Response<Reservation | ErrorResponse>,
+): Promise<void> {
+  await transitionReservation(request, response, 'CANCELLED');
+}
+
+export async function confirmReservationController(
+  request: Request<ReservationIdParams, Reservation | ErrorResponse, unknown>,
+  response: Response<Reservation | ErrorResponse>,
+): Promise<void> {
+  await transitionReservation(request, response, 'CONFIRMED');
+}
+
+// Both transition routes differ only in their target status and refusal message. An id that is
+// not an existing reservation's ObjectId returns 404, matching how creation treats resourceId.
+async function transitionReservation(
+  request: Request<ReservationIdParams, Reservation | ErrorResponse, unknown>,
+  response: Response<Reservation | ErrorResponse>,
+  target: ReservationTransition,
+): Promise<void> {
+  if (Object.keys(request.query).length > 0) {
+    response.status(400).json({
+      code: 'VALIDATION_ERROR',
+      message: 'Query parameters are not supported on this route.',
+    });
+    return;
+  }
+  const result = await updateReservationStatus(request.params.id, target);
+  switch (result.kind) {
+    case 'not_found':
+      response
+        .status(404)
+        .json({ code: 'RESERVATION_NOT_FOUND', message: 'The reservation was not found.' });
+      return;
+    case 'invalid_state':
+      response
+        .status(409)
+        .json({ code: 'INVALID_STATE_TRANSITION', message: TRANSITION_CONFLICTS[target] });
+      return;
+    case 'updated':
+      response.status(200).json(result.reservation);
+  }
 }

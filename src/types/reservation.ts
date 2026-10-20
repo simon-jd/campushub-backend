@@ -1,6 +1,8 @@
 // Derived from docs/openapi.json. Keep this file free of runtime logic.
 export type ResourceType = 'ROOM' | 'EQUIPMENT' | 'LAB';
 export type ReservationStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+// The statuses a reservation can be moved to after creation. CANCELLED is terminal.
+export type ReservationTransition = 'CONFIRMED' | 'CANCELLED';
 
 export interface User {
   id: string;
@@ -33,6 +35,8 @@ export interface ErrorResponse {
     | 'RESOURCE_NOT_FOUND'
     | 'RESOURCE_UNAVAILABLE'
     | 'DOUBLE_BOOKING'
+    | 'RESERVATION_NOT_FOUND'
+    | 'INVALID_STATE_TRANSITION'
     | 'NOT_FOUND'
     | 'PAYLOAD_TOO_LARGE'
     | 'UNSUPPORTED_MEDIA_TYPE'

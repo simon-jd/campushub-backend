@@ -1,4 +1,8 @@
-import type { CreateReservationRequest, ResourceType } from '../types/reservation';
+import type {
+  CreateReservationRequest,
+  ReservationStatus,
+  ResourceType,
+} from '../types/reservation';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -10,6 +14,18 @@ export function isIdentifier(value: unknown): value is string {
 
 export function isResourceType(value: unknown): value is ResourceType {
   return value === 'ROOM' || value === 'EQUIPMENT' || value === 'LAB';
+}
+
+export function isReservationStatus(value: unknown): value is ReservationStatus {
+  return value === 'PENDING' || value === 'CONFIRMED' || value === 'CANCELLED';
+}
+
+// Query strings carry no types, so only the two literal spellings in the contract are accepted.
+// Returns null for anything else; callers must compare against null, not rely on truthiness.
+export function parseBooleanLiteral(value: unknown): boolean | null {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
 }
 
 export function isTimestamp(value: unknown): value is string {

@@ -43,8 +43,9 @@ export const reservationSchema = new Schema<ReservationRecord>(
   { strict: 'throw', id: false, versionKey: false },
 );
 
-// Supports the per-resource overlap check and the active-reservations-by-user query.
+// Supports the per-resource overlap check and the reservations-by-user query. Since Lab 4 the
+// user listing returns every status in _id order, so the second index ends in _id, not endTime.
 reservationSchema.index({ resourceId: 1, startTime: 1, endTime: 1 });
-reservationSchema.index({ userId: 1, endTime: 1 });
+reservationSchema.index({ userId: 1, _id: 1 });
 
 export const ReservationModel = model<ReservationRecord>('Reservation', reservationSchema);

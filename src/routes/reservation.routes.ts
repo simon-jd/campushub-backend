@@ -1,5 +1,7 @@
 import { json, Router } from 'express';
 import {
+  cancelReservationController,
+  confirmReservationController,
   createReservationController,
   listUserReservationsController,
 } from '../controllers/reservation.controller';
@@ -11,3 +13,6 @@ reservationRouter.post(
   createReservationController,
 );
 reservationRouter.get('/reservations/user/:userId', listUserReservationsController);
+// Status transitions carry no request body, so no JSON parser is mounted on these routes.
+reservationRouter.patch('/reservations/:id/cancel', cancelReservationController);
+reservationRouter.patch('/reservations/:id/confirm', confirmReservationController);
