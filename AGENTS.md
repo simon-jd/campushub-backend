@@ -127,3 +127,14 @@ Do not combine multiple layers' responsibilities in one file, even for a simple 
 - Both HTTP suites assert live responses against `docs/openapi.json` through `src/tests/contract.helper.ts`, which fails when an endpoint returns a status the contract never declared. Keep new endpoints wired into that check rather than asserting shapes by hand.
 - HTTP tests and manual checks require a running MongoDB. Tests create, seed, and drop their own per-suite, per-process database (`campushub_test_<pid>`, `campushub_lab4_<pid>`); never point tests at development data. Manual checks require `npm run seed` first.
 - The built-in Node test runner requires no added dependency. Tests in `src/tests/` are included in existing compiler/lint coverage; do not mount them in the application.
+
+## 9. Frontend Client (Lab 5)
+
+Sections 2–8 govern the Express backend. `client/` is a separate Vite application and is outside the backend dependency allowlist. Do not add its packages (`react`, `axios`, `tailwindcss`, and their tooling) to the backend `package.json`, and do not add a CORS dependency so the browser can call port 3000. The client dev server proxies `/api` to `http://127.0.0.1:3000`.
+
+- Component architecture: functional components only, each with an explicit props interface.
+- State management: `useState`, `useEffect`, or custom hooks. Do not call the API from JSX.
+- Styling: Tailwind utility classes in `client/`. Do not introduce a second styling system there.
+- The typed API module is `client/src/api/campushubApi.ts`. It must stay aligned with `docs/openapi.json`. The lab text mentions `docs/openapi.yaml`; this repository's contract is `docs/openapi.json`.
+- Backend `npm run check` does not typecheck the client. Verify the client with `npm test`, `npm run lint`, and `npm run build` inside `client/`.
+- `.tsx` files belong only in `client/`. The backend source-extension rules are unchanged.

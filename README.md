@@ -177,6 +177,15 @@ transactions. Bookings for the same resource are therefore serialized inside one
 protect against several server processes sharing one database. There is no authentication or user database lookup.
 Do not deploy this lab implementation as a production booking system.
 
+## Frontend
+
+Lab 5 adds a React client in [client/](client/). It uses the existing API and does not change it.
+
+- Start MongoDB, run `npm run seed` if the catalog is empty, then `npm run dev` in this directory.
+- In a second terminal, run `npm ci` and `npm run dev` inside `client/`.
+- Open `http://127.0.0.1:5173`. Vite proxies `/api` to `http://127.0.0.1:3000`.
+- The student ID defaults to `user-456`. Choose a resource, pick a start and end, and book it. An overlapping booking shows a conflict alert. Cancel releases that time slot.
+
 ## Review and Submission
 
 Lab 1 and Lab 2 records are in [docs/lab1-verification.md](docs/lab1-verification.md) and [docs/lab2-verification.md](docs/lab2-verification.md).

@@ -1,0 +1,8 @@
+# CampusHub frontend
+
+`client/` is the Lab 5 React application. Backend rules in `AGENTS.md` still govern everything outside `client/`. Do not add frontend dependencies to the backend package, and do not add a CORS library to the API. The Vite dev server proxies `/api` to `http://127.0.0.1:3000`.
+
+- Component architecture: functional components only, each with an explicit props interface.
+- State management: `useState`, `useEffect`, or custom hooks. Do not call the API from JSX.
+- Styling: Tailwind utility classes.
+- Talk to the backend only through `client/src/api/campushubApi.ts`, which follows `docs/openapi.json`.
