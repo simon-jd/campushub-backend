@@ -1,8 +1,16 @@
-# CampusHub frontend
+# CampusHub agent context
 
-`client/` is the Lab 5 React application. Backend rules in `AGENTS.md` still govern everything outside `client/`. Do not add frontend dependencies to the backend package, and do not add a CORS library to the API. The Vite dev server proxies `/api` to `http://127.0.0.1:3000`.
-
-- Component architecture: functional components only, each with an explicit props interface.
-- State management: `useState`, `useEffect`, or custom hooks. Do not call the API from JSX.
-- Styling: Tailwind utility classes.
-- Talk to the backend only through `client/src/api/campushubApi.ts`, which follows `docs/openapi.json`.
+- Read AGENTS.md first; it is the authoritative policy for architecture, dependencies,
+  types, security, and required checks. Do not duplicate those standing rules here.
+- For lightweight code questions, search only src/ and client/src/. Use rg to select
+  relevant files and lines before reading; never dump the whole repository.
+- Respect .cursorignore for automatic context. Do not load historical verification
+  logs, dependencies, generated builds, source maps, or lockfiles for source questions.
+- Read docs/openapi.json explicitly for API contract work. Read manifests, configuration,
+  or historical evidence only when relevant to the task. Never read local secrets.
+- Express 5 forwards rejected controller promises to src/middleware/errorHandler.ts.
+- Reservation hooks live in client/src/hooks/. Transport error normalization lives in
+  client/src/api/campushubApi.ts; UI components consume hooks and render results.
+- src/types/reservation.ts is the shared type-only domain declaration layer. Import
+  or re-export these types from the client API module instead of copying interfaces.
+- Record actual Lab 6 evidence in docs/lab6-verification.md, not in standing rules.

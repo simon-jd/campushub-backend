@@ -138,3 +138,23 @@ Sections 2–8 govern the Express backend. `client/` is a separate Vite applicat
 - The typed API module is `client/src/api/campushubApi.ts`. It must stay aligned with `docs/openapi.json`. The lab text mentions `docs/openapi.yaml`; this repository's contract is `docs/openapi.json`.
 - Backend `npm run check` does not typecheck the client. Verify the client with `npm test`, `npm run lint`, and `npm run build` inside `client/`.
 - `.tsx` files belong only in `client/`. The backend source-extension rules are unchanged.
+
+## 10. Context and Shared Contracts (Lab 6)
+
+- For lightweight source questions, limit discovery and reads to `src/` and
+  `client/src/`, then read only files relevant to the question. `.cursorignore`
+  excludes generated output, dependencies, lockfiles, and local secrets from
+  Cursor automatic context. It does not restrict shell access or act as a
+  security boundary; apply the same source-first selection in other agents.
+- Read `docs/openapi.json` explicitly for contract work. Read manifests, build
+  configuration, and verification documents only when the task needs them.
+  Context optimization does not reduce compiler, lint, or test coverage.
+- `src/types/reservation.ts` is the shared type-only declaration layer for backend
+  and frontend domain interfaces. The frontend API module re-exports these types
+  using type-only exports; do not duplicate their definitions in the client.
+- Keep shared unexpected HTTP error handling in `src/middleware/errorHandler.ts`.
+  Express 5 forwards rejected controller promises to it without try/catch wrappers.
+  Controllers continue to map validation and domain outcomes to HTTP responses.
+- Keep reservation fetching, mutation, and form state in `client/src/hooks/`.
+  UI components consume hooks and render results; Axios error normalization stays
+  in the API module.

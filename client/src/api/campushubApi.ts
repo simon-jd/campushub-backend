@@ -1,27 +1,18 @@
 import axios from 'axios';
 
-export type ResourceType = 'ROOM' | 'EQUIPMENT' | 'LAB';
-export type ReservationStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
-
-export interface Resource {
-  id: string;
-  name: string;
-  type: ResourceType;
-  location: string;
-  isAvailable: boolean;
-}
-
-export interface CreateReservationDTO {
-  resourceId: string;
-  userId: string;
-  startTime: string;
-  endTime: string;
-}
-
-export interface Reservation extends CreateReservationDTO {
-  id: string;
-  status: ReservationStatus;
-}
+// Type-only imports share the backend contract without bundling server code.
+import type {
+  CreateReservationRequest as CreateReservationDTO,
+  Reservation,
+  Resource,
+} from '../../../src/types/reservation';
+export type {
+  CreateReservationRequest as CreateReservationDTO,
+  Reservation,
+  ReservationStatus,
+  Resource,
+  ResourceType,
+} from '../../../src/types/reservation';
 
 export class ApiError extends Error {
   readonly status: number;

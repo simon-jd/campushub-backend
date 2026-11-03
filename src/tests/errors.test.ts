@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 import express from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { errorHandler } from '../middleware/error.middleware';
+import { errorHandler } from '../middleware/errorHandler';
 
 test('unexpected failures keep the Lab 2 error contract', async (context: TestContext): Promise<void> => {
   const fixture = express();

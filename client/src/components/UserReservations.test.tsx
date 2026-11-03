@@ -50,6 +50,26 @@ describe('UserReservations', () => {
     expect(onCancel).toHaveBeenCalledWith(active.id);
   });
 
+  it('reports cancellation failures and re-enables the button', async () => {
+    const user = userEvent.setup();
+    render(
+      <UserReservations
+        reservations={[active]}
+        resourcesById={new Map([[room.id, room]])}
+        isLoading={false}
+        error={null}
+        onCancel={async (): Promise<void> => {
+          throw new Error('offline');
+        }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Cancel reservation' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The reservation could not be cancelled.',
+    );
+    expect(screen.getByRole('button', { name: 'Cancel reservation' })).toBeEnabled();
+  });
+
   it('shows loading, empty, and error states', () => {
     const { rerender } = render(
       <UserReservations

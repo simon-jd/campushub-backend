@@ -1,0 +1,23 @@
+# Dependencies and generated artifacts
+**/node_modules/
+**/dist/
+**/build/
+**/coverage/
+**/.vite/
+**/*.tsbuildinfo
+**/*.map
+**/*.log
+**/logs/
+.git/
+.superpowers/
+# Local configuration and credentials
+.env
+.env.*
+!.env-example
+**/.DS_Store
+# Dependency inventories: inspect explicitly only for dependency work
+**/package-lock.json
+
+# Historical lab evidence: read explicitly only for history/audit tasks
+docs/lab[1-5]-verification.md
+docs/*-steering-log.md

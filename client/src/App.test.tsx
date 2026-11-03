@@ -94,6 +94,21 @@ describe('App', () => {
     expect(api.cancelReservation).toHaveBeenCalledWith(reservation.id);
   });
 
+  it('clears a cancellation failure when switching students', async () => {
+    const user = userEvent.setup();
+    api.fetchUserReservations.mockResolvedValueOnce([reservation]).mockResolvedValueOnce([]);
+    api.cancelReservation.mockRejectedValue(
+      new ApiError(409, 'INVALID_STATE_TRANSITION', 'Already cancelled.'),
+    );
+    render(<App />);
+    await screen.findByText('CONFIRMED');
+    await user.click(screen.getByRole('button', { name: 'Cancel reservation' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Already cancelled.');
+    fireEvent.change(screen.getByLabelText('Student ID'), { target: { value: 'student-2' } });
+    expect(await screen.findByText('No active reservations.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('reloads the directory when the type filter changes', async () => {
     const user = userEvent.setup();
     api.fetchUserReservations.mockResolvedValue([]);

@@ -194,3 +194,18 @@ Review `docs/openapi.json` → `src/models/` → `src/services/` → `src/contro
 
 School repository: [postedism/campushub-backend](https://github.khoury.northeastern.edu/postedism/campushub-backend).
 Submit the repository URL to the Lab 3 Canvas assignment after reviewing the work.
+
+## Lab 6: refactoring and context optimization
+
+See [the audit and verification report](docs/lab6-verification.md) for the context
+query, measurements, design choices, regression checks, and environment limitations.
+
+- `.cursorrules` and `.cursorignore` keep routine context focused on source.
+- `src/middleware/errorHandler.ts` centralizes shared HTTP failures.
+- `client/src/hooks/useReservations.ts`, `useBookingForm.ts`, and `useCancellation.ts`
+  separate reservation state and operations from rendering.
+- The client imports shared domain types from `src/types/reservation.ts`.
+
+Run backend checks before the client build: the existing backend lint configuration
+also scans generated `client/dist/` JavaScript. Move or remove that generated client
+output before rerunning backend lint; do not change source lint coverage.

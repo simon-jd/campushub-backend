@@ -1,16 +1,12 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import {
-  cancelReservation,
-  createReservation,
   describeApiError,
   fetchResources,
-  fetchUserReservations,
   isStudentId,
-  type CreateReservationDTO,
-  type Reservation,
   type Resource,
   type ResourceType,
 } from './api/campushubApi';
+import { useReservations } from './hooks/useReservations';
 import { BookingForm } from './components/BookingForm';
 import { ResourceList } from './components/ResourceList';
 import { UserReservations } from './components/UserReservations';
@@ -23,10 +19,13 @@ export default function App(): ReactElement {
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [resourcesError, setResourcesError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Resource | null>(null);
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [reservationsLoading, setReservationsLoading] = useState(true);
-  const [reservationsError, setReservationsError] = useState<string | null>(null);
-  const [reservationVersion, setReservationVersion] = useState(0);
+  const {
+    reservations,
+    isLoading: reservationsLoading,
+    error: reservationsError,
+    book: handleBook,
+    cancel: handleCancel,
+  } = useReservations(userId);
 
   useEffect(() => {
     let active = true;
@@ -60,67 +59,10 @@ export default function App(): ReactElement {
     };
   }, [typeFilter]);
 
-  useEffect(() => {
-    if (!isStudentId(userId)) {
-      return;
-    }
-
-    let active = true;
-    fetchUserReservations(userId)
-      .then((next: Reservation[]) => {
-        if (active) {
-          setReservations(next);
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setReservationsError(describeApiError(error, 'Your bookings could not be loaded.'));
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setReservationsLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [userId, reservationVersion]);
-
-  function refreshReservations(): void {
-    setReservationsLoading(true);
-    setReservationsError(null);
-    setReservationVersion((version) => version + 1);
-  }
-
   function selectType(type: ResourceType | 'ALL'): void {
     setTypeFilter(type);
     setResourcesLoading(true);
     setResourcesError(null);
-  }
-
-  function changeStudent(nextUserId: string): void {
-    setUserId(nextUserId);
-    if (isStudentId(nextUserId)) {
-      setReservationsLoading(true);
-      setReservationsError(null);
-    }
-  }
-
-  async function handleBook(payload: CreateReservationDTO): Promise<void> {
-    await createReservation(payload);
-    refreshReservations();
-  }
-
-  async function handleCancel(reservationId: string): Promise<void> {
-    setReservationsError(null);
-    try {
-      await cancelReservation(reservationId);
-      refreshReservations();
-    } catch (error: unknown) {
-      setReservationsError(describeApiError(error, 'The reservation could not be cancelled.'));
-      throw error;
-    }
   }
 
   return (
@@ -151,7 +93,7 @@ export default function App(): ReactElement {
             <input
               value={userId}
               onChange={(event) => {
-                changeStudent(event.target.value);
+                setUserId(event.target.value);
               }}
               className="rounded-lg border border-stone-300 bg-white px-3 py-2 font-normal"
               autoComplete="off"
@@ -159,6 +101,7 @@ export default function App(): ReactElement {
           </label>
           <BookingForm resource={selected} userId={userId} onSubmit={handleBook} />
           <UserReservations
+            key={userId}
             reservations={isStudentId(userId) ? reservations : []}
             resourcesById={knownResources}
             isLoading={isStudentId(userId) && reservationsLoading}

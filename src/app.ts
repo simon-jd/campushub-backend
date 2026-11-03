@@ -1,7 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import type { DatabaseConfig } from './config/environment';
-import { errorHandler, notFoundHandler } from './middleware/error.middleware';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { healthRouter } from './routes/health.routes';
 import { reservationRouter } from './routes/reservation.routes';
 import { resourceRouter } from './routes/resource.routes';

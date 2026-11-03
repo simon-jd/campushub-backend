@@ -1,4 +1,5 @@
-import { useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
+import { useCancellation } from '../hooks/useCancellation';
 import type { Reservation, Resource } from '../api/campushubApi';
 
 export interface UserReservationsProps {
@@ -25,19 +26,13 @@ export function UserReservations({
   error,
   onCancel,
 }: UserReservationsProps): ReactElement {
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const {
+    cancellingId,
+    cancel: handleCancel,
+    error: cancellationError,
+  } = useCancellation(onCancel);
   const active = reservations.filter((reservation) => reservation.status !== 'CANCELLED');
-
-  async function handleCancel(reservationId: string): Promise<void> {
-    setCancellingId(reservationId);
-    try {
-      await onCancel(reservationId);
-    } catch {
-      // The parent records the error banner for this failure.
-    } finally {
-      setCancellingId(null);
-    }
-  }
+  const displayedError = cancellationError ?? error;
 
   return (
     <section className="rounded-2xl border border-stone-300 bg-white p-5 shadow-sm">
@@ -45,12 +40,12 @@ export function UserReservations({
       <h2 className="mt-1 text-2xl text-stone-900">My Bookings</h2>
 
       {isLoading ? <p className="mt-4 text-sm text-stone-600">Loading reservations...</p> : null}
-      {error ? (
+      {displayedError ? (
         <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
-          {error}
+          {displayedError}
         </p>
       ) : null}
-      {!isLoading && error === null && active.length === 0 ? (
+      {!isLoading && displayedError === null && active.length === 0 ? (
         <p className="mt-4 text-sm text-stone-600">No active reservations.</p>
       ) : null}
 
