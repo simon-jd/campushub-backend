@@ -212,6 +212,6 @@ query, measurements, design choices, regression checks, and environment limitati
   separate reservation state and operations from rendering.
 - The client imports shared domain types from `src/types/reservation.ts`.
 
-Run backend checks before the client build: the existing backend lint configuration
-also scans generated `client/dist/` JavaScript. Move or remove that generated client
-output before rerunning backend lint; do not change source lint coverage.
+Backend lint ignores the generated `client/dist/` build output, so backend checks and
+the client build can run in either order. Hand-written client source is not widened or
+narrowed by this: the client is checked with its own `npm run lint` inside `client/`.
