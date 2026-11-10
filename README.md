@@ -134,17 +134,23 @@ drop the reservations collection (for example `mongosh campushub --eval 'db.rese
 ## Verification
 
 ```sh
-npm test
+npm test                 # Jest + Supertest + in-memory MongoDB (Lab 7)
+npm run test:coverage    # same, with the coverage report and 80% thresholds
+npm run test:contract    # earlier node:test suites; need a local MongoDB
 npm run check
 npm run build
 npx --yes @redocly/cli@2.55.0 lint docs/openapi.json --extends spec
 ```
 
-`npm test` uses Node's built-in test runner and real local HTTP requests. The Lab 2 HTTP suite now runs against
-MongoDB: it connects to the configured server, creates a throwaway database named `campushub_test_<pid>`,
-seeds its own fixtures, and drops that database afterward, so development data is never touched.
-MongoDB must be running; tests fail rather than skip when it is not. Model tests validate schemas offline.
-It needs permission to listen on localhost. No test-framework dependency is needed.
+`npm test` runs Jest. Every test file starts its own `mongodb-memory-server` instance (`src/test/setup.ts`), connects the
+real Mongoose models to it, and empties it between tests, so no installed MongoDB or `.env` is needed (the first run
+downloads a `mongod` binary). Suites live in `__tests__` folders next to the code: `src/services/__tests__/`,
+`src/routes/__tests__/` (Supertest against the real Express app) and `src/controllers/__tests__/`. Coverage is collected
+from `src/services/` and `src/controllers/` and fails below 80% statements, branches, functions and lines.
+
+`npm run test:contract` runs the earlier Lab 2–4 `node:test` suites. They use real local HTTP requests and a throwaway
+database named `campushub_test_<pid>` on the MongoDB from your configuration, which must be running; they fail rather than skip when it is not.
+Model tests validate schemas offline. They need permission to listen on localhost.
 
 `npm run check` runs strict TypeScript, ESLint, and Prettier checks. `npm run build` compiles `src/` to `dist/`.
 The compiled suite can also run with `node --env-file-if-exists=.env --test dist/tests/*.test.js` after building.

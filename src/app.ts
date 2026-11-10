@@ -1,3 +1,4 @@
+import os from 'node:os';
 import express from 'express';
 import mongoose from 'mongoose';
 import type { DatabaseConfig } from './config/environment';
@@ -20,6 +21,10 @@ export async function connectDatabase(database: DatabaseConfig): Promise<void> {
   await mongoose.connect(database.uri, {
     dbName: database.dbName,
     serverSelectionTimeoutMS: 5000,
+    // The driver otherwise loads `os` with a dynamic import() while building its handshake
+    // metadata. That import fails inside Jest's VM sandbox, the handshake then omits the required
+    // `driver` field, and MongoDB refuses the connection. Passing the module avoids the import.
+    runtimeAdapters: { os },
   });
 }
 

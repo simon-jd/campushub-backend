@@ -14,6 +14,7 @@ Read this file, the user's current request, and the relevant code before startin
 - Use Node.js `>=24.21.0`, npm `>=11.19.1`, TypeScript, Express, and Mongoose.
 - The only permitted direct runtime dependencies are `express` and `mongoose`. Node.js built-in modules are allowed.
 - The only permitted direct development dependencies are `typescript`, `ts-node`, `@types/node`, `@types/express`, `eslint`, `@eslint/js`, `typescript-eslint`, `jiti`, and `prettier`.
+- Lab 7 added these direct development dependencies, as the assignment requires, solely for automated testing: `jest`, `ts-jest`, `@types/jest`, `supertest`, `@types/supertest`, and `mongodb-memory-server`, plus `@types/semver` (with `skipLibCheck: false`, `tsc` needs it for `mongodb-memory-server`'s declarations). They must never be imported from non-test source. `tsconfig.json` lists `jest` in `types` so the Jest globals type-check.
 - The allowlist governs direct dependencies. npm resolves their transitive dependencies into the lockfile; do not treat those packages as independently approved application imports.
 - Before adding or replacing a direct dependency, explain why it is necessary and obtain user approval, then update this file and the lockfile.
 - Use npm and commit `package-lock.json`. Use `npm ci` when installing from an existing lockfile.
