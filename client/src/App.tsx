@@ -18,6 +18,8 @@ export default function App(): ReactElement {
   const [knownResources, setKnownResources] = useState<ReadonlyMap<string, Resource>>(new Map());
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [resourcesError, setResourcesError] = useState<string | null>(null);
+  // Bumped to re-run the catalog request when the filter itself has not changed (retry).
+  const [catalogReload, setCatalogReload] = useState(0);
   const [selected, setSelected] = useState<Resource | null>(null);
   const {
     reservations,
@@ -57,9 +59,17 @@ export default function App(): ReactElement {
     return () => {
       active = false;
     };
-  }, [typeFilter]);
+  }, [typeFilter, catalogReload]);
 
   function selectType(type: ResourceType | 'ALL'): void {
+    if (type === typeFilter) {
+      // Re-selecting the active filter changes no effect dependency, so only a failed load has
+      // anything to redo; otherwise setting the loading flag here would never be cleared.
+      if (resourcesError === null) {
+        return;
+      }
+      setCatalogReload((count) => count + 1);
+    }
     setTypeFilter(type);
     setResourcesLoading(true);
     setResourcesError(null);

@@ -121,4 +121,34 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: 'Study Room 302' })).not.toBeInTheDocument();
     expect(api.fetchResources).toHaveBeenCalledWith('LAB');
   });
+
+  it('does not get stuck loading when the already-selected filter is clicked again', async () => {
+    const user = userEvent.setup();
+    api.fetchUserReservations.mockResolvedValue([]);
+
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Study Room 302' });
+    await user.click(screen.getByRole('button', { name: 'All' }));
+
+    expect(screen.queryByText('Loading resources...')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Study Room 302' })).toBeInTheDocument();
+    expect(api.fetchResources).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries the catalog when the current filter is clicked after a load failure', async () => {
+    const user = userEvent.setup();
+    api.fetchUserReservations.mockResolvedValue([]);
+    api.fetchResources.mockReset();
+    api.fetchResources
+      .mockRejectedValueOnce(new ApiError(500, 'INTERNAL_ERROR', 'Catalog is down.'))
+      .mockResolvedValueOnce([room, lab]);
+
+    render(<App />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Catalog is down.');
+    await user.click(screen.getByRole('button', { name: 'All' }));
+
+    expect(await screen.findByRole('heading', { name: 'Study Room 302' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(api.fetchResources).toHaveBeenCalledTimes(2);
+  });
 });
