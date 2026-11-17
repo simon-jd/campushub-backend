@@ -56,8 +56,8 @@ export function createReservation(input: CreateReservationRequest): Promise<Rese
     const overlapping = await ReservationModel.exists({
       resourceId,
       status: { $ne: 'CANCELLED' },
-      startTime: { $lt: endTime },
-      endTime: { $gt: startTime },
+      startTime: { $lte: endTime },
+      endTime: { $gte: startTime },
     }).exec();
     if (overlapping !== null) return { kind: 'conflict' };
 
