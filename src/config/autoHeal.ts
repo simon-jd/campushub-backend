@@ -4,7 +4,7 @@ import type { AutoHealConfig } from '../interfaces/autoHeal';
 
 // DeepSeek's Anthropic-compatible endpoint. AUTO_FIX_API_URL overrides it for any other provider.
 const DEFAULT_API_BASE_URL = 'https://api.deepseek.com/anthropic';
-const DEFAULT_MODEL = 'deepseek-v4-pro';
+const DEFAULT_MODEL = 'deepseek-flash';
 const DEFAULT_LOG_PATH = 'test-results.log';
 
 export function loadAutoHealConfig(env: NodeJS.ProcessEnv): AutoHealConfig {

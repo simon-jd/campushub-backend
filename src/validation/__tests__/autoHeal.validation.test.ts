@@ -98,7 +98,7 @@ describe('loadAutoHealConfig', () => {
   it('applies defaults', () => {
     expect(loadAutoHealConfig(env)).toMatchObject({
       apiBaseUrl: 'https://api.deepseek.com/anthropic',
-      model: 'deepseek-v4-pro',
+      model: 'deepseek-flash',
       logPath: 'test-results.log',
       baseBranch: 'test/breaking-reservation-change',
       runId: '42',
@@ -111,7 +111,7 @@ describe('loadAutoHealConfig', () => {
     ).toBe('https://example.com/anthropic');
     expect(loadAutoHealConfig({ ...env, AUTO_FIX_API_URL: '', AUTO_FIX_MODEL: '' })).toMatchObject({
       apiBaseUrl: 'https://api.deepseek.com/anthropic',
-      model: 'deepseek-v4-pro',
+      model: 'deepseek-flash',
     });
   });
 
