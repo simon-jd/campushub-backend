@@ -2,6 +2,8 @@
 // so AgentPatch only describes a reply after parseAgentPatch has validated it.
 export interface AutoHealConfig {
   anthropicApiKey: string;
+  // Base URL of an Anthropic-compatible API; "/v1/messages" is appended to it.
+  apiBaseUrl: string;
   model: string;
   logPath: string;
   baseBranch: string;

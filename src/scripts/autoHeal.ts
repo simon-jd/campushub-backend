@@ -13,7 +13,7 @@ import {
   parseAgentPatch,
 } from '../validation/autoHeal.validation';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
+const MESSAGES_PATH = '/v1/messages';
 const API_VERSION = '2023-06-01';
 const TOOL_NAME = 'submit_patch';
 const MAX_LOG_CHARS = 30_000;
@@ -113,7 +113,7 @@ async function askAgent(
     `## Application source (editable)\n${renderFiles(sources)}`,
   ].join('\n\n');
 
-  const response = await fetch(API_URL, {
+  const response = await fetch(`${config.apiBaseUrl}${MESSAGES_PATH}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -122,7 +122,9 @@ async function askAgent(
     },
     body: JSON.stringify({
       model: config.model,
-      max_tokens: 32_000,
+      max_tokens: 16_000,
+      // DeepSeek only honors a forced tool_choice when thinking is off.
+      thinking: { type: 'disabled' },
       system: SYSTEM_PROMPT,
       tools: [PATCH_TOOL],
       tool_choice: { type: 'tool', name: TOOL_NAME },
@@ -131,7 +133,7 @@ async function askAgent(
   });
   // The error body is not printed: it can echo request details.
   if (!response.ok) {
-    throw new Error(`Anthropic API request failed with HTTP ${response.status}.`);
+    throw new Error(`Model API request failed with HTTP ${response.status}.`);
   }
   const input = findToolInput(await response.json(), TOOL_NAME);
   if (input === undefined) {

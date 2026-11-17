@@ -24,7 +24,7 @@ export function extractReferencedPaths(log: string): string[] {
   return [...new Set(log.match(REFERENCED_PATH_PATTERN) ?? [])];
 }
 
-// Returns the input of the first tool_use block with the given name in an Anthropic Messages
+// Returns the input of the first tool_use block with the given name in an Anthropic-style Messages
 // API response, or undefined when the response has no such block.
 export function findToolInput(response: unknown, toolName: string): unknown {
   if (!isRecord(response) || !Array.isArray(response.content)) {

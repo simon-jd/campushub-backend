@@ -97,14 +97,26 @@ describe('loadAutoHealConfig', () => {
 
   it('applies defaults', () => {
     expect(loadAutoHealConfig(env)).toMatchObject({
-      model: 'claude-sonnet-5-5',
+      apiBaseUrl: 'https://api.deepseek.com/anthropic',
+      model: 'deepseek-v4-pro',
       logPath: 'test-results.log',
       baseBranch: 'test/breaking-reservation-change',
       runId: '42',
     });
   });
 
+  it('accepts an https override, trims a trailing slash, and treats empty as unset', () => {
+    expect(
+      loadAutoHealConfig({ ...env, AUTO_FIX_API_URL: 'https://example.com/anthropic/' }).apiBaseUrl,
+    ).toBe('https://example.com/anthropic');
+    expect(loadAutoHealConfig({ ...env, AUTO_FIX_API_URL: '', AUTO_FIX_MODEL: '' })).toMatchObject({
+      apiBaseUrl: 'https://api.deepseek.com/anthropic',
+      model: 'deepseek-v4-pro',
+    });
+  });
+
   it.each([
+    ['http api url', { ...env, AUTO_FIX_API_URL: 'http://example.com' }],
     ['missing key', { ...env, ANTHROPIC_API_KEY: '' }],
     ['option-like branch', { ...env, BASE_BRANCH: '--force' }],
     ['non-numeric run id', { ...env, RUN_ID: 'abc' }],

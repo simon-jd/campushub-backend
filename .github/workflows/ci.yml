@@ -99,7 +99,11 @@ jobs:
       - name: Agent repair and pull request
         run: npm run auto-heal
         env:
+          # Holds the DeepSeek key; the name is kept because the endpoint is Anthropic-compatible.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Optional repository variables; defaults live in src/config/autoHeal.ts.
+          AUTO_FIX_API_URL: ${{ vars.AUTO_FIX_API_URL }}
+          AUTO_FIX_MODEL: ${{ vars.AUTO_FIX_MODEL }}
           GH_TOKEN: ${{ github.token }}
           # The fix PR targets the branch that broke the build: the PR head, or main for a push.
           BASE_BRANCH: ${{ github.head_ref || github.ref_name }}
