@@ -52,12 +52,14 @@ export function createReservation(input: CreateReservationRequest): Promise<Rese
     const resourceId = new Types.ObjectId(resource.id);
     const startTime = new Date(input.startTime);
     const endTime = new Date(input.endTime);
-    // Half-open intervals [start, end): adjacent bookings do not overlap.
+    // Half-open intervals [start, end): adjacent bookings do not overlap, so both bounds are
+    // strict. An existing booking conflicts when it starts before the new end and ends after
+    // the new start.
     const overlapping = await ReservationModel.exists({
       resourceId,
       status: { $ne: 'CANCELLED' },
-      startTime: { $lte: endTime },
-      endTime: { $gte: startTime },
+      startTime: { $lt: endTime },
+      endTime: { $gt: startTime },
     }).exec();
     if (overlapping !== null) return { kind: 'conflict' };
 
