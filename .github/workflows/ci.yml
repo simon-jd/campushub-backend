@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      tests_failed: ${{ steps.jest.outcome == 'failure' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      # package.json requires npm >= 11.19.1 and .npmrc sets engine-strict, so a bundled older npm
+      # would make `npm ci` fail.
+      - name: Install pinned npm
+        run: npm install -g npm@11.20.0
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # continue-on-error lets the log upload run and the job fail afterwards with an explicit
+      # output, so `auto-fix` triggers on failing tests only (not on lint or install failures).
+      - name: Jest
+        id: jest
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-results.log
+
+      - name: Upload Jest log
+        if: steps.jest.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.log
+          retention-days: 7
+
+      - name: Fail the job when Jest failed
+        if: steps.jest.outcome == 'failure'
+        run: |
+          echo "Jest failed; see test-results.log"
+          exit 1
+
+  auto-fix:
+    needs: test
+    # Runs only when Jest failed. Skipped for fork PRs (no secrets, read-only token) and for the
+    # agent's own fix branches, so the agent can never trigger itself recursively.
+    if: >-
+      failure() &&
+      needs.test.outputs.tests_failed == 'true' &&
+      (github.event_name == 'push' ||
+        (github.event.pull_request.head.repo.full_name == github.repository &&
+         !startsWith(github.head_ref, 'fix/auto-heal-')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Repair the commit that failed, not the synthetic PR merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install pinned npm
+        run: npm install -g npm@11.20.0
+
+      - run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: test-results
+
+      - name: Agent repair and pull request
+        run: npm run auto-heal
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          # The fix PR targets the branch that broke the build: the PR head, or main for a push.
+          BASE_BRANCH: ${{ github.head_ref || github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
